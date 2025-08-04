@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { DashboardHeader } from './DashboardHeader';
 import { DashboardNav } from './DashboardNav';
 import { OverviewPage } from './pages/OverviewPage';
+import { OrderingPage } from './pages/OrderingPage';
 import { SuppliersPage } from './pages/SuppliersPage';
 import { OutgoingsPage } from './pages/OutgoingsPage';
 import { TransactionsPage } from './pages/TransactionsPage';
@@ -26,6 +27,8 @@ export const Dashboard = () => {
     switch (currentPage) {
       case 'overview':
         return <ProtectedRoute permission="dashboard"><OverviewPage /></ProtectedRoute>;
+      case 'ordering':
+        return <ProtectedRoute permission="ordering"><OrderingPage /></ProtectedRoute>;
       case 'suppliers':
         return <ProtectedRoute permission="suppliers"><SuppliersPage /></ProtectedRoute>;
       case 'outgoings':
@@ -62,10 +65,10 @@ export const Dashboard = () => {
   return (
     <div className="min-h-screen bg-gray-50 flex">
       <DashboardNav currentPage={currentPage} onPageChange={setCurrentPage} />
-      
+
       <div className="flex-1 flex flex-col">
         <DashboardHeader onLogout={signOut} />
-        
+
         <main className="flex-1 p-6">
           {renderPage()}
         </main>

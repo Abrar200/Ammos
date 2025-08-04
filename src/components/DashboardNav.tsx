@@ -1,9 +1,9 @@
-import { 
-  BarChart3, 
-  Users, 
-  CreditCard, 
-  UserCheck, 
-  TrendingUp, 
+import {
+  BarChart3,
+  Users,
+  CreditCard,
+  UserCheck,
+  TrendingUp,
   Banknote,
   Settings,
   Home,
@@ -15,7 +15,8 @@ import {
   Activity,
   Inbox,
   ClipboardList,
-  Camera
+  Camera,
+  ShoppingCart
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -26,6 +27,7 @@ interface DashboardNavProps {
 
 const navItems = [
   { id: 'overview', label: 'Overview', icon: Home },
+  { id: 'ordering', label: 'Ordering', icon: ShoppingCart },
   { id: 'outgoings', label: 'Outgoings', icon: BarChart3 },
   { id: 'suppliers', label: 'Suppliers', icon: Users },
   { id: 'subscriptions', label: 'Subscriptions', icon: CreditCard },

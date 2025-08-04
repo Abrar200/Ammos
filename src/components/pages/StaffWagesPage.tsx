@@ -8,39 +8,7 @@ import { StaffProfileDialog } from '@/components/StaffProfileDialog';
 import { AddStaffDialog } from '@/components/AddStaffDialog';
 import { supabase } from '@/lib/supabase';
 import { Plus, Search, Users, DollarSign, Clock, TrendingUp, AlertTriangle } from 'lucide-react';
-
-interface Staff {
-  id: string;
-  full_name: string;
-  email: string;
-  position: string;
-  hourly_rate: number;
-  employment_type: string;
-  avatar_url?: string;
-  phone?: string;
-  is_active: boolean;
-}
-
-interface PayrollRecord {
-  id: string;
-  staff_id: string;
-  pay_period_start: string;
-  pay_period_end: string;
-  hours_worked: number;
-  gross_pay: number;
-  net_pay: number;
-  created_at: string;
-  staff: { full_name: string };
-}
-
-interface ExpiringCertification {
-  id: string;
-  staff_id: string;
-  certification_type: string;
-  certification_name: string;
-  expiry_date: string;
-  staff: { full_name: string };
-}
+import type { Staff, StaffCardData, PayrollRecord, ExpiringCertification } from '@/types/staff';
 
 export const StaffWagesPage = () => {
   const [staff, setStaff] = useState<Staff[]>([]);
@@ -78,19 +46,29 @@ export const StaffWagesPage = () => {
 
   const fetchRecentPayroll = async () => {
     try {
+      // Fixed: Proper join syntax for Supabase
       const { data, error } = await supabase
         .from('payroll_records')
         .select(`
           *,
-          staff:staff_id (full_name)
+          staff!inner (
+            full_name
+          )
         `)
         .order('created_at', { ascending: false })
         .limit(10);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Payroll fetch error:', error);
+        // Don't throw error if table doesn't exist, just set empty array
+        setPayrollRecords([]);
+        return;
+      }
+
       setPayrollRecords(data || []);
     } catch (error) {
       console.error('Error fetching payroll records:', error);
+      setPayrollRecords([]);
     }
   };
 
@@ -98,21 +76,40 @@ export const StaffWagesPage = () => {
     try {
       const thirtyDaysFromNow = new Date();
       thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
-      
+
       const { data, error } = await supabase
         .from('staff_certifications')
         .select(`
           *,
-          staff:staff_id (full_name)
+          staff!inner (
+            full_name
+          )
         `)
         .lte('expiry_date', thirtyDaysFromNow.toISOString().split('T')[0])
         .order('expiry_date');
 
-      if (error) throw error;
+      if (error) {
+        console.error('Certifications fetch error:', error);
+        setExpiringCerts([]);
+        return;
+      }
+
       setExpiringCerts(data || []);
     } catch (error) {
       console.error('Error fetching expiring certifications:', error);
+      setExpiringCerts([]);
     }
+  };
+
+  // Handle staff updates from StaffProfileDialog (optimistic updates)
+  const handleStaffUpdate = (updatedStaff: Staff) => {
+    console.log('Updating staff in main list:', updatedStaff);
+    
+    setStaff(prevStaff => 
+      prevStaff.map(staffMember => 
+        staffMember.id === updatedStaff.id ? updatedStaff : staffMember
+      )
+    );
   };
 
   const filteredStaff = staff.filter(member =>
@@ -120,13 +117,32 @@ export const StaffWagesPage = () => {
     member.position.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handlePayroll = (staffMember: Staff) => {
-    setSelectedStaff(staffMember);
-    setPayrollDialogOpen(true);
+  // Convert Staff to StaffCardData for the StaffCard component
+  const convertToStaffCardData = (staffMember: Staff): StaffCardData => {
+    return {
+      id: staffMember.id,
+      name: staffMember.full_name,
+      email: staffMember.email,
+      position: staffMember.position,
+      hourly_rate: staffMember.hourly_rate,
+      employment_type: staffMember.employment_type,
+      image_url: staffMember.avatar_url,
+      phone: staffMember.phone,
+      is_active: staffMember.is_active
+    };
   };
 
-  const handleEdit = (staffMember: Staff) => {
-    setSelectedStaffId(staffMember.id);
+  const handlePayroll = (staffCardData: StaffCardData) => {
+    // Find the full staff record
+    const fullStaffRecord = staff.find(s => s.id === staffCardData.id);
+    if (fullStaffRecord) {
+      setSelectedStaff(fullStaffRecord);
+      setPayrollDialogOpen(true);
+    }
+  };
+
+  const handleEdit = (staffCardData: StaffCardData) => {
+    setSelectedStaffId(staffCardData.id);
     setProfileDialogOpen(true);
   };
 
@@ -134,11 +150,20 @@ export const StaffWagesPage = () => {
     setAddStaffDialogOpen(true);
   };
 
+  // Handle staff deletion with optimistic updates
+  const handleStaffDelete = (staffId: string) => {
+    console.log('Removing staff from main list:', staffId);
+    
+    setStaff(prevStaff => 
+      prevStaff.filter(staffMember => staffMember.id !== staffId)
+    );
+  };
+
   const totalStaff = staff.length;
   const activeStaff = staff.filter(s => s.is_active).length;
   const totalPayrollThisMonth = payrollRecords
     .filter(record => new Date(record.created_at).getMonth() === new Date().getMonth())
-    .reduce((sum, record) => sum + record.net_pay, 0);
+    .reduce((sum, record) => sum + (record.net_pay || 0), 0);
 
   if (loading) {
     return <div className="p-6">Loading...</div>;
@@ -199,7 +224,7 @@ export const StaffWagesPage = () => {
             </div>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
@@ -211,7 +236,7 @@ export const StaffWagesPage = () => {
             </div>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
@@ -223,7 +248,7 @@ export const StaffWagesPage = () => {
             </div>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
@@ -255,14 +280,10 @@ export const StaffWagesPage = () => {
         {filteredStaff.map((staffMember) => (
           <StaffCard
             key={staffMember.id}
-            staff={{
-              ...staffMember,
-              name: staffMember.full_name,
-              image_url: staffMember.avatar_url
-            }}
+            staff={convertToStaffCardData(staffMember)}
             onPayroll={handlePayroll}
             onEdit={handleEdit}
-            onDelete={fetchStaff}
+            onDelete={() => handleStaffDelete(staffMember.id)}
           />
         ))}
       </div>
@@ -278,14 +299,14 @@ export const StaffWagesPage = () => {
               {payrollRecords.map((record) => (
                 <div key={record.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div>
-                    <p className="font-medium">{record.staff.full_name}</p>
+                    <p className="font-medium">{record.staff?.full_name || 'Unknown Staff'}</p>
                     <p className="text-sm text-gray-600">
                       {new Date(record.pay_period_start).toLocaleDateString()} - {new Date(record.pay_period_end).toLocaleDateString()}
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="font-semibold">${record.net_pay.toFixed(2)}</p>
-                    <p className="text-sm text-gray-600">{record.hours_worked}h worked</p>
+                    <p className="font-semibold">${(record.net_pay || 0).toFixed(2)}</p>
+                    <p className="text-sm text-gray-600">{(record.regular_hours || 0)}h worked</p>
                   </div>
                 </div>
               ))}
@@ -307,6 +328,7 @@ export const StaffWagesPage = () => {
         isOpen={profileDialogOpen}
         onClose={() => setProfileDialogOpen(false)}
         staffId={selectedStaffId}
+        onStaffUpdate={handleStaffUpdate} // Pass the callback
       />
 
       <AddStaffDialog

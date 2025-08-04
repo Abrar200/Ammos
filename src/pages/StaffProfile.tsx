@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -45,6 +45,7 @@ export default function StaffProfile() {
   const [staff, setStaff] = useState<Staff | null>(null);
   const [certifications, setCertifications] = useState<Certification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [certificationDialogOpen, setCertificationDialogOpen] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -90,15 +91,15 @@ export default function StaffProfile() {
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-4xl mx-auto">
         <div className="mb-6">
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             onClick={() => navigate(-1)}
             className="mb-4"
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back
           </Button>
-          
+
           <Card>
             <CardHeader>
               <div className="flex items-center gap-4">
@@ -158,7 +159,7 @@ export default function StaffProfile() {
                     </div>
                   )}
                 </div>
-                
+
                 {staff.emergency_contact_name && (
                   <div className="pt-4 border-t">
                     <h4 className="font-semibold mb-2">Emergency Contact</h4>
@@ -259,9 +260,14 @@ export default function StaffProfile() {
                   <CardTitle>Certifications & Documents</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <CertificationUpload 
-                    staffId={staff.id} 
-                    onUpload={() => fetchStaffData(staff.id)}
+                  <CertificationUpload
+                    staffId={staff.id}
+                    isOpen={certificationDialogOpen}
+                    onClose={() => setCertificationDialogOpen(false)}
+                    onSuccess={() => {
+                      fetchStaffData(staff.id);
+                      setCertificationDialogOpen(false); // close after success
+                    }}
                   />
                 </CardContent>
               </Card>

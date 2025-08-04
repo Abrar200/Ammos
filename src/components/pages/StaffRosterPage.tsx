@@ -15,6 +15,8 @@ interface Roster {
   type: string;
   is_published: boolean;
   is_holiday: boolean;
+  notes?: string;
+  created_at?: string;
   shifts: Array<{
     id: string;
     staff_id: string;
@@ -27,6 +29,7 @@ interface Roster {
     total_hours: number;
     total_cost: number;
     hourly_rate: number;
+    notes?: string;
   }>;
 }
 
@@ -42,6 +45,7 @@ export const StaffRosterPage = () => {
   const fetchRosters = async () => {
     try {
       setLoading(true);
+      console.log('🔄 Fetching rosters...');
       
       // Fetch rosters with their shifts and staff details
       const { data: rostersData, error: rostersError } = await supabase
@@ -58,29 +62,92 @@ export const StaffRosterPage = () => {
         `)
         .order('start_date', { ascending: false });
 
-      if (rostersError) throw rostersError;
+      if (rostersError) {
+        console.error('❌ Roster fetch error:', rostersError);
+        
+        // If tables don't exist, show helpful message
+        if (rostersError.code === '42P01') {
+          toast({
+            title: "Database Setup Required",
+            description: "Roster tables need to be created. Please run the database setup SQL.",
+            variant: "destructive"
+          });
+        } else {
+          toast({
+            title: "Error",
+            description: "Failed to fetch rosters: " + rostersError.message,
+            variant: "destructive"
+          });
+        }
+        
+        setRosters([]);
+        return;
+      }
+
+      console.log('✅ Raw rosters data:', rostersData);
 
       // Transform the data to match our interface
-      const transformedRosters: Roster[] = (rostersData || []).map(roster => ({
-        ...roster,
-        shifts: (roster.roster_shifts || []).map((shift: any) => ({
+      const transformedRosters: Roster[] = (rostersData || []).map(roster => {
+        const shifts = (roster.roster_shifts || []).map((shift: any) => ({
           ...shift,
-          staff_name: shift.staff?.full_name || 'Unknown',
-          staff_role: shift.staff?.position || 'Unknown'
-        }))
-      }));
+          staff_name: shift.staff?.full_name || 'Unknown Staff',
+          staff_role: shift.staff?.position || 'Unknown Position'
+        }));
 
+        return {
+          ...roster,
+          shifts
+        };
+      });
+
+      console.log('✅ Transformed rosters:', transformedRosters);
       setRosters(transformedRosters);
+      
     } catch (error) {
-      console.error('Error fetching rosters:', error);
+      console.error('💥 Error fetching rosters:', error);
       toast({
         title: "Error",
         description: "Failed to fetch rosters",
         variant: "destructive"
       });
+      setRosters([]);
     } finally {
       setLoading(false);
     }
+  };
+
+  // Optimistic update: Add new roster immediately
+  const handleRosterCreated = (newRoster?: Roster) => {
+    console.log('🎉 Roster created, refreshing list...');
+    
+    if (newRoster) {
+      // Optimistic update: add to the beginning of the list
+      setRosters(prevRosters => [newRoster, ...prevRosters]);
+      console.log('✅ Added roster optimistically:', newRoster);
+    }
+    
+    // Still fetch to ensure data consistency
+    fetchRosters();
+  };
+
+  // Optimistic update: Update existing roster
+  const handleRosterUpdate = (updatedRoster: Roster) => {
+    console.log('🔄 Updating roster optimistically:', updatedRoster.id);
+    
+    setRosters(prevRosters =>
+      prevRosters.map(roster =>
+        roster.id === updatedRoster.id ? updatedRoster : roster
+      )
+    );
+  };
+
+  // Optimistic update: Remove roster
+  const handleRosterDelete = (rosterId: string) => {
+    console.log('🗑️ Removing roster optimistically:', rosterId);
+    
+    setRosters(prevRosters =>
+      prevRosters.filter(roster => roster.id !== rosterId)
+    );
   };
 
   // Calculate summary statistics
@@ -111,7 +178,7 @@ export const StaffRosterPage = () => {
           <p className="text-gray-600 mt-2">Create and manage weekly/fortnightly rosters with shift costing</p>
         </div>
         <div className="flex space-x-2">
-          <CreateRosterDialog onRosterCreated={fetchRosters} />
+          <CreateRosterDialog onRosterCreated={handleRosterCreated} />
           <Button variant="outline">
             <Download className="h-4 w-4 mr-2" />
             Export All
@@ -190,7 +257,7 @@ export const StaffRosterPage = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <CreateRosterDialog onRosterCreated={fetchRosters} />
+              <CreateRosterDialog onRosterCreated={handleRosterCreated} />
             </CardContent>
           </Card>
         ) : (
@@ -198,7 +265,8 @@ export const StaffRosterPage = () => {
             <RosterCard 
               key={roster.id} 
               roster={roster} 
-              onUpdate={fetchRosters}
+              onUpdate={handleRosterUpdate}
+              onDelete={handleRosterDelete}
             />
           ))
         )}

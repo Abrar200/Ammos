@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Mail, Phone, DollarSign, Calendar, User, Trash2 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
 
@@ -28,9 +27,8 @@ interface StaffCardProps {
 }
 
 export const StaffCard = ({ staff, onPayroll, onEdit, onDelete }: StaffCardProps) => {
-  const navigate = useNavigate();
   const { toast } = useToast();
-  
+
   const getInitials = (name: string) => {
     return name.split(' ').map(n => n[0]).join('').toUpperCase();
   };
@@ -42,8 +40,9 @@ export const StaffCard = ({ staff, onPayroll, onEdit, onDelete }: StaffCardProps
     return `$${staff.hourly_rate}/hr`;
   };
 
+  // Fixed: Use onEdit instead of navigate
   const handleProfileClick = () => {
-    navigate(`/staff/${staff.id}`);
+    onEdit(staff);
   };
 
   const handleDelete = async () => {
@@ -77,15 +76,15 @@ export const StaffCard = ({ staff, onPayroll, onEdit, onDelete }: StaffCardProps
     <Card className="hover:shadow-md transition-shadow">
       <CardHeader className="pb-3">
         <div className="flex items-center gap-3">
-          <Avatar 
-            className="h-12 w-12 cursor-pointer hover:ring-2 hover:ring-blue-500" 
+          <Avatar
+            className="h-12 w-12 cursor-pointer hover:ring-2 hover:ring-blue-500"
             onClick={handleProfileClick}
           >
             <AvatarImage src={staff.image_url} alt={staff.name} />
             <AvatarFallback>{getInitials(staff.name)}</AvatarFallback>
           </Avatar>
           <div className="flex-1">
-            <h3 
+            <h3
               className="font-semibold text-lg cursor-pointer hover:text-blue-600 transition-colors"
               onClick={handleProfileClick}
             >
@@ -103,15 +102,15 @@ export const StaffCard = ({ staff, onPayroll, onEdit, onDelete }: StaffCardProps
           <Mail className="h-4 w-4" />
           <span>{staff.email}</span>
         </div>
-        
+
         <div className="flex items-center gap-2 text-sm text-gray-600">
           <DollarSign className="h-4 w-4" />
           <span>{getRateDisplay()}</span>
         </div>
 
         <div className="flex gap-2 pt-2">
-          <Button 
-            size="sm" 
+          <Button
+            size="sm"
             onClick={handleProfileClick}
             variant="outline"
             className="flex-1"
@@ -119,8 +118,8 @@ export const StaffCard = ({ staff, onPayroll, onEdit, onDelete }: StaffCardProps
             <User className="h-4 w-4 mr-1" />
             Profile
           </Button>
-          <Button 
-            size="sm" 
+          <Button
+            size="sm"
             onClick={() => onPayroll(staff)}
             className="flex-1"
           >
