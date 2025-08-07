@@ -1,23 +1,24 @@
-import { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { useState, useEffect } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Plus, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/lib/supabase';
-import { Supplier } from '@/types/supplier'; // ADD THIS IMPORT
+import { Supplier } from '@/types/supplier';
 
-interface AddSupplierDialogProps {
-  onSupplierAdded: () => void;
-  onOptimisticUpdate?: (supplier: Supplier) => void;
+interface EditSupplierDialogProps {
+  supplier: Supplier;
+  open: boolean;
+  onClose: () => void;
+  onSupplierUpdated: () => void;
 }
 
-export const AddSupplierDialog = ({ onSupplierAdded, onOptimisticUpdate }: AddSupplierDialogProps) => {
-  const [open, setOpen] = useState(false);
+export const EditSupplierDialog = ({ supplier, open, onClose, onSupplierUpdated }: EditSupplierDialogProps) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -34,6 +35,23 @@ export const AddSupplierDialog = ({ onSupplierAdded, onOptimisticUpdate }: AddSu
     address: '',
     notes: ''
   });
+
+  useEffect(() => {
+    if (supplier) {
+      setFormData({
+        name: supplier.name,
+        supplier_type: supplier.supplier_type,
+        payment_frequency: supplier.payment_frequency,
+        amount_per_period: supplier.amount_per_period.toString(),
+        email: supplier.email || '',
+        phone: supplier.phone || '',
+        address: supplier.address || '',
+        notes: supplier.notes || ''
+      });
+      setTags(supplier.tags || []);
+      setImagePreview(supplier.image_url);
+    }
+  }, [supplier]);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -72,32 +90,8 @@ export const AddSupplierDialog = ({ onSupplierAdded, onOptimisticUpdate }: AddSu
     setLoading(true);
     setError(null);
 
-    // Create optimistic supplier data
-    const optimisticSupplier: Supplier = {
-      id: `temp-${Date.now()}`,
-      name: formData.name,
-      supplier_type: formData.supplier_type,
-      payment_frequency: formData.payment_frequency,
-      amount_per_period: parseFloat(formData.amount_per_period),
-      monthly_total: calculateMonthlyTotal(),
-      image_url: imagePreview,
-      tags: tags,
-      email: formData.email,
-      phone: formData.phone,
-      address: formData.address,
-      notes: formData.notes,
-      created_at: new Date().toISOString()
-    };
-
-    // Apply optimistic update immediately
-    if (onOptimisticUpdate) {
-      onOptimisticUpdate(optimisticSupplier);
-      setOpen(false);
-      resetForm();
-    }
-
     try {
-      let imageUrl = null;
+      let imageUrl = supplier.image_url;
 
       if (imageFile) {
         const fileExt = imageFile.name.split('.').pop();
@@ -116,9 +110,9 @@ export const AddSupplierDialog = ({ onSupplierAdded, onOptimisticUpdate }: AddSu
         imageUrl = publicUrl;
       }
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('suppliers')
-        .insert({
+        .update({
           name: formData.name,
           supplier_type: formData.supplier_type,
           payment_frequency: formData.payment_frequency,
@@ -129,49 +123,28 @@ export const AddSupplierDialog = ({ onSupplierAdded, onOptimisticUpdate }: AddSu
           email: formData.email,
           phone: formData.phone,
           address: formData.address,
-          notes: formData.notes
+          notes: formData.notes,
+          updated_at: new Date().toISOString()
         })
-        .select()
-        .single();
+        .eq('id', supplier.id);
 
       if (error) throw error;
 
-      // Replace optimistic update with real data
-      onSupplierAdded();
-      
+      onSupplierUpdated();
+      onClose();
     } catch (error) {
-      console.error('Error adding supplier:', error);
-      setError(error instanceof Error ? error.message : 'Failed to add supplier');
-      // Revert optimistic update on error
-      onSupplierAdded();
+      console.error('Error updating supplier:', error);
+      setError(error instanceof Error ? error.message : 'Failed to update supplier');
     } finally {
       setLoading(false);
     }
   };
 
-  const resetForm = () => {
-    setFormData({
-      name: '', supplier_type: '', payment_frequency: '', amount_per_period: '',
-      email: '', phone: '', address: '', notes: ''
-    });
-    setTags([]);
-    setNewTag('');
-    setImageFile(null);
-    setImagePreview(null);
-    setError(null);
-  };
-
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button>
-          <Plus className="w-4 h-4 mr-2" />
-          Add Supplier
-        </Button>
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Add New Supplier</DialogTitle>
+          <DialogTitle>Edit Supplier</DialogTitle>
         </DialogHeader>
         
         {error && (
@@ -322,11 +295,11 @@ export const AddSupplierDialog = ({ onSupplierAdded, onOptimisticUpdate }: AddSu
           </div>
 
           <div className="flex justify-end gap-2 pt-4">
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? 'Adding...' : 'Add Supplier'}
+              {loading ? 'Updating...' : 'Update Supplier'}
             </Button>
           </div>
         </form>

@@ -1,7 +1,5 @@
 // lib/dmssService.ts
-// DMSS Surveillance System Integration Service
-
-interface DMSSCredentials {
+export interface DMSSCredentials {
     server: string;
     port: number;
     username: string;
@@ -9,255 +7,253 @@ interface DMSSCredentials {
     protocol: 'http' | 'https';
   }
   
-  interface Camera {
+  export interface DMSSQRCredentials {
+    server: string;
+    port: number;
+    qrCode: string;
+    deviceId?: string;
+    protocol: 'http' | 'https';
+  }
+  
+  export interface Camera {
     id: string;
     name: string;
     location: string;
+    channel: number;
     status: 'online' | 'offline' | 'maintenance';
     recording: boolean;
-    channel: number;
-    deviceId: string;
-    streamUrl?: string;
-    thumbnailUrl?: string;
     resolution: string;
     fps: number;
     lastSeen?: string;
   }
   
-  interface RecordingInfo {
-    cameraId: string;
-    startTime: string;
-    endTime: string;
-    fileSize: number;
-    downloadUrl: string;
-  }
-  
-  interface DMSSSystemInfo {
-    isConnected: boolean;
-    serverVersion: string;
+  export interface DMSSSystemInfo {
     totalCameras: number;
     onlineCameras: number;
     recordingCameras: number;
     storageUsed: number;
     storageTotal: number;
+    systemName: string;
+    version: string;
+    uptime: number;
+  }
+  
+  export interface RecordingInfo {
+    id: string;
+    cameraId: string;
+    startTime: string;
+    endTime: string;
+    fileSize: number;
+    filePath: string;
+    recordingType: 'manual' | 'scheduled' | 'motion';
+  }
+  
+  export interface QRCodeData {
+    deviceId: string;
+    serverAddress: string;
+    port: number;
+    authToken: string;
+    timestamp: number;
   }
   
   class DMSSService {
-    private credentials: DMSSCredentials | null = null;
     private isConnected = false;
-    private mockMode = true; // Set to false for real DMSS integration
-  
-    // Mock data for development
-    private mockCameras: Camera[] = [
-      {
-        id: 'cam_001',
-        name: 'Front Entrance',
-        location: 'Main Door',
-        status: 'online',
-        recording: true,
-        channel: 1,
-        deviceId: 'DVR001',
-        resolution: '1920x1080',
-        fps: 25,
-        lastSeen: new Date().toISOString(),
-        streamUrl: 'rtmp://demo-server/live/cam1',
-        thumbnailUrl: '/api/camera/cam_001/thumbnail'
-      },
-      {
-        id: 'cam_002',
-        name: 'Cash Register',
-        location: 'Counter Area',
-        status: 'online',
-        recording: true,
-        channel: 2,
-        deviceId: 'DVR001',
-        resolution: '1920x1080',
-        fps: 25,
-        lastSeen: new Date().toISOString(),
-        streamUrl: 'rtmp://demo-server/live/cam2',
-        thumbnailUrl: '/api/camera/cam_002/thumbnail'
-      },
-      {
-        id: 'cam_003',
-        name: 'Kitchen Area',
-        location: 'Kitchen',
-        status: 'online',
-        recording: true,
-        channel: 3,
-        deviceId: 'DVR001',
-        resolution: '1280x720',
-        fps: 15,
-        lastSeen: new Date().toISOString(),
-        streamUrl: 'rtmp://demo-server/live/cam3',
-        thumbnailUrl: '/api/camera/cam_003/thumbnail'
-      },
-      {
-        id: 'cam_004',
-        name: 'Storage Room',
-        location: 'Back Storage',
-        status: 'offline',
-        recording: false,
-        channel: 4,
-        deviceId: 'DVR001',
-        resolution: '1280x720',
-        fps: 15,
-        lastSeen: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
-        streamUrl: 'rtmp://demo-server/live/cam4',
-        thumbnailUrl: '/api/camera/cam_004/thumbnail'
-      },
-      {
-        id: 'cam_005',
-        name: 'Parking Area',
-        location: 'Outside',
-        status: 'online',
-        recording: true,
-        channel: 5,
-        deviceId: 'DVR002',
-        resolution: '1920x1080',
-        fps: 30,
-        lastSeen: new Date().toISOString(),
-        streamUrl: 'rtmp://demo-server/live/cam5',
-        thumbnailUrl: '/api/camera/cam_005/thumbnail'
-      },
-      {
-        id: 'cam_006',
-        name: 'Dining Area',
-        location: 'Main Dining',
-        status: 'maintenance',
-        recording: false,
-        channel: 6,
-        deviceId: 'DVR002',
-        resolution: '1920x1080',
-        fps: 25,
-        lastSeen: new Date(Date.now() - 1800000).toISOString(), // 30 minutes ago
-        streamUrl: 'rtmp://demo-server/live/cam6',
-        thumbnailUrl: '/api/camera/cam_006/thumbnail'
-      }
-    ];
+    private credentials: DMSSCredentials | null = null;
+    private qrCredentials: DMSSQRCredentials | null = null;
+    private authMethod: 'password' | 'qr' | null = null;
+    private authToken: string | null = null;
+    private baseUrl: string | null = null;
   
     async connect(credentials: DMSSCredentials): Promise<boolean> {
-      console.log('🔗 Connecting to DMSS server...', {
-        server: credentials.server,
-        port: credentials.port,
-        username: credentials.username
-      });
-  
-      if (this.mockMode) {
-        // Simulate connection delay
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        this.credentials = credentials;
-        this.isConnected = true;
-        
-        console.log('✅ DMSS connection established (mock mode)');
-        return true;
-      }
-  
       try {
-        // Real DMSS API connection would go here
-        const response = await fetch(`${credentials.protocol}://${credentials.server}:${credentials.port}/api/login`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            username: credentials.username,
-            password: credentials.password
-          })
+        console.log('🔗 Connecting to DMSS with credentials...', { 
+          server: credentials.server, 
+          port: credentials.port,
+          username: credentials.username 
         });
   
-        if (!response.ok) {
-          throw new Error(`DMSS connection failed: ${response.statusText}`);
+        this.baseUrl = `${credentials.protocol}://${credentials.server}:${credentials.port}`;
+        
+        const loginResponse = await this.makeRequest('/api/v1/auth/login', 'POST', {
+          username: credentials.username,
+          password: credentials.password
+        });
+  
+        if (!loginResponse.success) {
+          throw new Error(loginResponse.message || 'Authentication failed');
         }
   
-        const result = await response.json();
-        
-        if (result.success) {
-          this.credentials = credentials;
-          this.isConnected = true;
-          console.log('✅ DMSS connection established');
-          return true;
-        } else {
-          throw new Error('Invalid credentials');
-        }
-      } catch (error) {
+        this.authToken = loginResponse.data.token;
+        this.credentials = credentials;
+        this.authMethod = 'password';
+        this.isConnected = true;
+  
+        console.log('✅ DMSS connection established successfully');
+        return true;
+  
+      } catch (error: any) {
         console.error('❌ DMSS connection failed:', error);
-        this.isConnected = false;
-        return false;
+        this.cleanup();
+        throw new Error(error.message || 'Failed to connect to DMSS system');
+      }
+    }
+  
+    async connectWithQR(qrCredentials: DMSSQRCredentials): Promise<boolean> {
+      try {
+        console.log('🔗 Connecting to DMSS with QR code...');
+  
+        const qrData = this.parseQRCode(qrCredentials.qrCode);
+        
+        this.baseUrl = `${qrCredentials.protocol}://${qrCredentials.server}:${qrCredentials.port}`;
+  
+        const authResponse = await this.makeRequest('/api/v1/auth/qr-login', 'POST', {
+          deviceId: qrData.deviceId,
+          authToken: qrData.authToken,
+          timestamp: qrData.timestamp,
+          clientInfo: {
+            platform: 'web',
+            version: '1.0.0',
+            deviceName: 'Restaurant Dashboard'
+          }
+        });
+  
+        if (!authResponse.success) {
+          throw new Error(authResponse.message || 'QR authentication failed');
+        }
+  
+        this.authToken = authResponse.data.token;
+        this.qrCredentials = qrCredentials;
+        this.authMethod = 'qr';
+        this.isConnected = true;
+  
+        console.log('✅ DMSS QR connection established successfully');
+        return true;
+  
+      } catch (error: any) {
+        console.error('❌ DMSS QR connection failed:', error);
+        this.cleanup();
+        throw new Error(error.message || 'Failed to connect using QR code');
       }
     }
   
     async disconnect(): Promise<void> {
-      console.log('🔌 Disconnecting from DMSS...');
-      
-      if (this.mockMode) {
-        this.isConnected = false;
-        this.credentials = null;
-        console.log('✅ DMSS disconnected (mock mode)');
-        return;
-      }
-  
-      if (this.credentials && this.isConnected) {
-        try {
-          await fetch(`${this.credentials.protocol}://${this.credentials.server}:${this.credentials.port}/api/logout`, {
-            method: 'POST'
-          });
-        } catch (error) {
-          console.error('Error during DMSS logout:', error);
+      try {
+        if (this.isConnected && this.authToken) {
+          await this.makeRequest('/api/v1/auth/logout', 'POST');
         }
+      } catch (error) {
+        console.warn('Warning during disconnect:', error);
+      } finally {
+        this.cleanup();
       }
+    }
   
+    private cleanup(): void {
       this.isConnected = false;
       this.credentials = null;
-      console.log('✅ DMSS disconnected');
+      this.qrCredentials = null;
+      this.authMethod = null;
+      this.authToken = null;
+      this.baseUrl = null;
+    }
+  
+    private parseQRCode(qrCode: string): QRCodeData {
+      try {
+        try {
+          const parsed = JSON.parse(qrCode);
+          return {
+            deviceId: parsed.deviceId || parsed.id,
+            serverAddress: parsed.server || parsed.address,
+            port: parsed.port || 37777,
+            authToken: parsed.token || parsed.authToken,
+            timestamp: parsed.timestamp || Date.now()
+          };
+        } catch {
+          return this.parseEncodedQR(qrCode);
+        }
+      } catch (error) {
+        throw new Error('Invalid QR code format');
+      }
+    }
+  
+    private parseEncodedQR(qrCode: string): QRCodeData {
+      const parts = qrCode.split(':');
+      
+      if (parts.length < 4) {
+        throw new Error('Invalid QR code format');
+      }
+  
+      return {
+        deviceId: parts[0],
+        serverAddress: parts[1],
+        port: parseInt(parts[2]) || 37777,
+        authToken: parts[3],
+        timestamp: parts[4] ? parseInt(parts[4]) : Date.now()
+      };
     }
   
     async getCameras(): Promise<Camera[]> {
-      if (!this.isConnected) {
-        throw new Error('Not connected to DMSS system');
-      }
-  
-      if (this.mockMode) {
-        // Simulate random status changes
-        return this.mockCameras.map(camera => ({
-          ...camera,
-          lastSeen: camera.status === 'online' ? new Date().toISOString() : camera.lastSeen
-        }));
-      }
+      if (!this.isConnected) throw new Error('Not connected to DMSS');
   
       try {
-        const response = await fetch(`${this.credentials!.protocol}://${this.credentials!.server}:${this.credentials!.port}/api/cameras`);
-        const data = await response.json();
-        return data.cameras || [];
-      } catch (error) {
+        const response = await this.makeRequest('/api/v1/cameras');
+        
+        if (!response.success) {
+          throw new Error(response.message || 'Failed to fetch cameras');
+        }
+  
+        return response.data.cameras.map((cam: any) => ({
+          id: cam.id,
+          name: cam.name,
+          location: cam.location,
+          channel: cam.channel,
+          status: cam.online ? 'online' : 'offline',
+          recording: cam.recording,
+          resolution: cam.resolution || '1920x1080',
+          fps: cam.fps || 25,
+          lastSeen: cam.lastSeen
+        }));
+  
+      } catch (error: any) {
         console.error('Error fetching cameras:', error);
-        return [];
+        throw new Error(error.message || 'Failed to fetch cameras');
       }
     }
   
-    async getCamera(cameraId: string): Promise<Camera | null> {
-      const cameras = await this.getCameras();
-      return cameras.find(cam => cam.id === cameraId) || null;
+    async getSystemInfo(): Promise<DMSSSystemInfo> {
+      if (!this.isConnected) throw new Error('Not connected to DMSS');
+  
+      try {
+        const response = await this.makeRequest('/api/v1/system/info');
+        
+        if (!response.success) {
+          throw new Error(response.message || 'Failed to fetch system info');
+        }
+  
+        const data = response.data;
+        return {
+          totalCameras: data.totalCameras,
+          onlineCameras: data.onlineCameras,
+          recordingCameras: data.recordingCameras,
+          storageUsed: data.storage.used,
+          storageTotal: data.storage.total,
+          systemName: data.systemName,
+          version: data.version,
+          uptime: data.uptime
+        };
+  
+      } catch (error: any) {
+        console.error('Error fetching system info:', error);
+        throw new Error(error.message || 'Failed to fetch system info');
+      }
     }
   
     async startRecording(cameraId: string): Promise<boolean> {
-      console.log(`▶️ Starting recording for camera ${cameraId}`);
-      
-      if (this.mockMode) {
-        const camera = this.mockCameras.find(cam => cam.id === cameraId);
-        if (camera) {
-          camera.recording = true;
-          return true;
-        }
-        return false;
-      }
+      if (!this.isConnected) throw new Error('Not connected to DMSS');
   
       try {
-        const response = await fetch(`${this.credentials!.protocol}://${this.credentials!.server}:${this.credentials!.port}/api/cameras/${cameraId}/record`, {
-          method: 'POST',
-          body: JSON.stringify({ action: 'start' })
-        });
-        return response.ok;
+        const response = await this.makeRequest(`/api/v1/cameras/${cameraId}/record/start`, 'POST');
+        return response.success;
       } catch (error) {
         console.error('Error starting recording:', error);
         return false;
@@ -265,142 +261,188 @@ interface DMSSCredentials {
     }
   
     async stopRecording(cameraId: string): Promise<boolean> {
-      console.log(`⏹️ Stopping recording for camera ${cameraId}`);
-      
-      if (this.mockMode) {
-        const camera = this.mockCameras.find(cam => cam.id === cameraId);
-        if (camera) {
-          camera.recording = false;
-          return true;
-        }
-        return false;
-      }
+      if (!this.isConnected) throw new Error('Not connected to DMSS');
   
       try {
-        const response = await fetch(`${this.credentials!.protocol}://${this.credentials!.server}:${this.credentials!.port}/api/cameras/${cameraId}/record`, {
-          method: 'POST',
-          body: JSON.stringify({ action: 'stop' })
-        });
-        return response.ok;
+        const response = await this.makeRequest(`/api/v1/cameras/${cameraId}/record/stop`, 'POST');
+        return response.success;
       } catch (error) {
         console.error('Error stopping recording:', error);
         return false;
       }
     }
   
-    async getSystemInfo(): Promise<DMSSSystemInfo> {
-      if (!this.isConnected) {
-        throw new Error('Not connected to DMSS system');
-      }
-  
-      if (this.mockMode) {
-        const onlineCameras = this.mockCameras.filter(cam => cam.status === 'online').length;
-        const recordingCameras = this.mockCameras.filter(cam => cam.recording).length;
-        
-        return {
-          isConnected: true,
-          serverVersion: 'DMSS v4.2.1',
-          totalCameras: this.mockCameras.length,
-          onlineCameras,
-          recordingCameras,
-          storageUsed: 2.3, // TB
-          storageTotal: 8.0 // TB
-        };
-      }
-  
-      try {
-        const response = await fetch(`${this.credentials!.protocol}://${this.credentials!.server}:${this.credentials!.port}/api/system/info`);
-        const data = await response.json();
-        return data;
-      } catch (error) {
-        console.error('Error fetching system info:', error);
-        throw error;
-      }
-    }
-  
     async getRecordings(cameraId: string, startDate: Date, endDate: Date): Promise<RecordingInfo[]> {
-      console.log(`📹 Fetching recordings for camera ${cameraId}`, { startDate, endDate });
-      
-      if (this.mockMode) {
-        // Generate mock recordings
-        const recordings: RecordingInfo[] = [];
-        const current = new Date(startDate);
-        
-        while (current <= endDate) {
-          if (Math.random() > 0.3) { // 70% chance of having a recording
-            const endTime = new Date(current.getTime() + 3600000); // 1 hour recording
-            recordings.push({
-              cameraId,
-              startTime: current.toISOString(),
-              endTime: endTime.toISOString(),
-              fileSize: Math.floor(Math.random() * 500) + 100, // 100-600 MB
-              downloadUrl: `/api/recordings/${cameraId}/${current.getTime()}.mp4`
-            });
-          }
-          current.setHours(current.getHours() + 1);
-        }
-        
-        return recordings;
-      }
+      if (!this.isConnected) throw new Error('Not connected to DMSS');
   
       try {
-        const response = await fetch(
-          `${this.credentials!.protocol}://${this.credentials!.server}:${this.credentials!.port}/api/cameras/${cameraId}/recordings?start=${startDate.toISOString()}&end=${endDate.toISOString()}`
+        const response = await this.makeRequest(
+          `/api/v1/cameras/${cameraId}/recordings?start=${startDate.toISOString()}&end=${endDate.toISOString()}`
         );
-        const data = await response.json();
-        return data.recordings || [];
-      } catch (error) {
+        
+        if (!response.success) {
+          throw new Error(response.message || 'Failed to fetch recordings');
+        }
+  
+        return response.data.recordings;
+  
+      } catch (error: any) {
         console.error('Error fetching recordings:', error);
-        return [];
+        throw new Error(error.message || 'Failed to fetch recordings');
       }
     }
   
-    async testConnection(): Promise<boolean> {
-      if (!this.credentials) return false;
-      
-      try {
-        const response = await fetch(`${this.credentials.protocol}://${this.credentials.server}:${this.credentials.port}/api/ping`);
-        return response.ok;
-      } catch (error) {
-        return false;
-      }
+    getStreamUrl(cameraId: string): string | null {
+      if (!this.isConnected || !this.baseUrl) return null;
+      return `${this.baseUrl}/api/v1/cameras/${cameraId}/stream?token=${this.authToken}`;
+    }
+  
+    getThumbnailUrl(cameraId: string): string | null {
+      if (!this.isConnected || !this.baseUrl) return null;
+      return `${this.baseUrl}/api/v1/cameras/${cameraId}/thumbnail?token=${this.authToken}`;
     }
   
     getConnectionStatus(): boolean {
       return this.isConnected;
     }
   
-    getCredentials(): DMSSCredentials | null {
-      return this.credentials;
+    getCredentials(): DMSSCredentials | DMSSQRCredentials | null {
+      return this.authMethod === 'password' ? this.credentials : this.qrCredentials;
     }
   
-    // Stream URL helpers
-    getStreamUrl(cameraId: string): string | null {
-      if (!this.isConnected) return null;
-      
-      const camera = this.mockCameras.find(cam => cam.id === cameraId);
-      if (!camera) return null;
-      
-      if (this.mockMode) {
-        // Return a placeholder stream URL for development
-        return `https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4`;
-      }
-      
-      return `${this.credentials!.protocol}://${this.credentials!.server}:${this.credentials!.port}/stream/${cameraId}`;
+    getAuthMethod(): 'password' | 'qr' | null {
+      return this.authMethod;
     }
   
-    getThumbnailUrl(cameraId: string): string | null {
-      if (!this.isConnected) return null;
+    async testConnection(credentials: DMSSCredentials): Promise<{ success: boolean; message: string; systemInfo?: any }> {
+      const tempBaseUrl = `${credentials.protocol}://${credentials.server}:${credentials.port}`;
       
-      if (this.mockMode) {
-        // Return placeholder thumbnail
-        return `https://picsum.photos/320/240?random=${cameraId}`;
+      try {
+        console.log('🧪 Testing DMSS connection...');
+        
+        const healthResponse = await this.makeRequestDirect(tempBaseUrl, '/api/v1/health');
+        
+        if (!healthResponse.ok) {
+          throw new Error(`Server unreachable: ${healthResponse.status}`);
+        }
+  
+        const loginResponse = await this.makeRequestDirect(tempBaseUrl, '/api/v1/auth/login', 'POST', {
+          username: credentials.username,
+          password: credentials.password
+        });
+  
+        const loginData = await loginResponse.json();
+  
+        if (!loginResponse.ok || !loginData.success) {
+          throw new Error(loginData.message || 'Authentication failed');
+        }
+  
+        const systemResponse = await this.makeRequestDirect(
+          tempBaseUrl, 
+          '/api/v1/system/info',
+          'GET',
+          null,
+          { 'Authorization': `Bearer ${loginData.data.token}` }
+        );
+  
+        const systemData = await systemResponse.json();
+  
+        return {
+          success: true,
+          message: 'Connection successful',
+          systemInfo: systemData.data
+        };
+  
+      } catch (error: any) {
+        console.error('Connection test failed:', error);
+        return {
+          success: false,
+          message: error.message || 'Connection test failed'
+        };
+      }
+    }
+  
+    async testQRConnection(qrCredentials: DMSSQRCredentials): Promise<{ success: boolean; message: string; systemInfo?: any }> {
+      const tempBaseUrl = `${qrCredentials.protocol}://${qrCredentials.server}:${qrCredentials.port}`;
+      
+      try {
+        console.log('🧪 Testing DMSS QR connection...');
+        
+        const qrData = this.parseQRCode(qrCredentials.qrCode);
+        
+        const healthResponse = await this.makeRequestDirect(tempBaseUrl, '/api/v1/health');
+        
+        if (!healthResponse.ok) {
+          throw new Error(`Server unreachable: ${healthResponse.status}`);
+        }
+  
+        const authResponse = await this.makeRequestDirect(tempBaseUrl, '/api/v1/auth/qr-login', 'POST', {
+          deviceId: qrData.deviceId,
+          authToken: qrData.authToken,
+          timestamp: qrData.timestamp
+        });
+  
+        const authData = await authResponse.json();
+  
+        if (!authResponse.ok || !authData.success) {
+          throw new Error(authData.message || 'QR authentication failed');
+        }
+  
+        return {
+          success: true,
+          message: 'QR connection successful',
+          systemInfo: { method: 'qr', deviceId: qrData.deviceId }
+        };
+  
+      } catch (error: any) {
+        console.error('QR connection test failed:', error);
+        return {
+          success: false,
+          message: error.message || 'QR connection test failed'
+        };
+      }
+    }
+  
+    private async makeRequest(endpoint: string, method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET', data?: any): Promise<any> {
+      if (!this.baseUrl) throw new Error('No base URL configured');
+      
+      return this.makeRequestDirect(this.baseUrl, endpoint, method, data, {
+        'Authorization': `Bearer ${this.authToken}`
+      });
+    }
+  
+    private async makeRequestDirect(
+      baseUrl: string, 
+      endpoint: string, 
+      method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET', 
+      data?: any,
+      headers: Record<string, string> = {}
+    ): Promise<any> {
+      const url = `${baseUrl}${endpoint}`;
+      
+      const requestConfig: RequestInit = {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          ...headers
+        },
+        signal: AbortSignal.timeout(10000), // 10 second timeout using AbortSignal
+      };
+  
+      if (data && method !== 'GET') {
+        requestConfig.body = JSON.stringify(data);
+      }
+  
+      const response = await fetch(url, requestConfig);
+      
+      if (method === 'GET' || headers['Authorization']) {
+        return response.json();
       }
       
-      return `${this.credentials!.protocol}://${this.credentials!.server}:${this.credentials!.port}/thumbnail/${cameraId}`;
+      return response;
     }
   }
   
-  // Export singleton instance
   export const dmssService = new DMSSService();
-  export type { Camera, DMSSCredentials, DMSSSystemInfo, RecordingInfo };
+  export default dmssService;
