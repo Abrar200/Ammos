@@ -1,6 +1,6 @@
-// Updated src/data/mockData.ts - Fix supplier interface
+// Updated src/data/mockData.ts - Monthly Revenue set to $247,000
 export const mockStats = {
-  totalRevenue: 85420,
+  totalRevenue: 247000,
   totalExpenses: 42315,
   profit: 43105,
   suppliers: 24
@@ -21,11 +21,11 @@ export const mockSuppliers = [
     phone: '+61 8 8234 5678',
     address: '123 Market Street, Adelaide SA 5000',
     supplier_type: 'Food & Beverage',
-    type: 'Food & Beverage', // Duplicate for compatibility
+    type: 'Food & Beverage',
     payment_frequency: 'weekly',
-    frequency: 'weekly', // Duplicate for compatibility
+    frequency: 'weekly',
     amount_per_period: 3850.50,
-    amount: 3850.50, // Duplicate for compatibility
+    amount: 3850.50,
     monthlyTotal: 15420.50,
     image_url: null,
     tags: ['fresh-produce', 'vegetables', 'fruits'],
@@ -126,8 +126,6 @@ export const mockExpenseData = [
   { name: 'Equipment', amount: 2315 }
 ];
 
-// Alternative: Create types file to ensure consistency
-// src/types/supplier.ts
 export interface Supplier {
   id: number;
   name: string;
@@ -135,18 +133,17 @@ export interface Supplier {
   phone?: string;
   address?: string;
   supplier_type: string;
-  type: string; // For backward compatibility
+  type: string;
   payment_frequency: string;
-  frequency: string; // For backward compatibility
+  frequency: string;
   amount_per_period: number;
-  amount: number; // For backward compatibility
+  amount: number;
   monthlyTotal: number;
   image_url?: string | null;
   tags?: string[];
   notes?: string;
 }
 
-// Alternative simplified version if you want to update SupplierList component instead:
 export const mockSuppliersSimple = [
   {
     id: 1,

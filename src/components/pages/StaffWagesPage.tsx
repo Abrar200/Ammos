@@ -7,7 +7,7 @@ import { PayrollDialog } from '@/components/PayrollDialog';
 import { StaffProfileDialog } from '@/components/StaffProfileDialog';
 import { AddStaffDialog } from '@/components/AddStaffDialog';
 import { supabase } from '@/lib/supabase';
-import { Plus, Search, Users, DollarSign, Clock, TrendingUp, AlertTriangle } from 'lucide-react';
+import { Plus, Search, Users, DollarSign, Clock, TrendingUp, AlertTriangle, Calculator } from 'lucide-react';
 import type { Staff, StaffCardData, PayrollRecord, ExpiringCertification } from '@/types/staff';
 
 export const StaffWagesPage = () => {
@@ -46,7 +46,6 @@ export const StaffWagesPage = () => {
 
   const fetchRecentPayroll = async () => {
     try {
-      // Fixed: Proper join syntax for Supabase
       const { data, error } = await supabase
         .from('payroll_records')
         .select(`
@@ -60,7 +59,6 @@ export const StaffWagesPage = () => {
 
       if (error) {
         console.error('Payroll fetch error:', error);
-        // Don't throw error if table doesn't exist, just set empty array
         setPayrollRecords([]);
         return;
       }
@@ -101,7 +99,6 @@ export const StaffWagesPage = () => {
     }
   };
 
-  // Handle staff updates from StaffProfileDialog (optimistic updates)
   const handleStaffUpdate = (updatedStaff: Staff) => {
     console.log('Updating staff in main list:', updatedStaff);
     
@@ -117,7 +114,6 @@ export const StaffWagesPage = () => {
     member.position.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Convert Staff to StaffCardData for the StaffCard component
   const convertToStaffCardData = (staffMember: Staff): StaffCardData => {
     return {
       id: staffMember.id,
@@ -133,7 +129,6 @@ export const StaffWagesPage = () => {
   };
 
   const handlePayroll = (staffCardData: StaffCardData) => {
-    // Find the full staff record
     const fullStaffRecord = staff.find(s => s.id === staffCardData.id);
     if (fullStaffRecord) {
       setSelectedStaff(fullStaffRecord);
@@ -150,7 +145,6 @@ export const StaffWagesPage = () => {
     setAddStaffDialogOpen(true);
   };
 
-  // Handle staff deletion with optimistic updates
   const handleStaffDelete = (staffId: string) => {
     console.log('Removing staff from main list:', staffId);
     
@@ -159,8 +153,25 @@ export const StaffWagesPage = () => {
     );
   };
 
+  // Calculate weekly payroll for current week
+  const calculateWeeklyPayroll = () => {
+    const today = new Date();
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - today.getDay());
+    
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6);
+
+    return payrollRecords
+      .filter(record => {
+        const recordDate = new Date(record.pay_period_start);
+        return recordDate >= startOfWeek && recordDate <= endOfWeek;
+      })
+      .reduce((sum, record) => sum + (record.net_pay || 0), 0);
+  };
+
   const totalStaff = staff.length;
-  const activeStaff = staff.filter(s => s.is_active).length;
+  const weeklyPayroll = calculateWeeklyPayroll();
   const totalPayrollThisMonth = payrollRecords
     .filter(record => new Date(record.created_at).getMonth() === new Date().getMonth())
     .reduce((sum, record) => sum + (record.net_pay || 0), 0);
@@ -211,7 +222,7 @@ export const StaffWagesPage = () => {
         </Card>
       )}
 
-      {/* Stats Cards */}
+      {/* Stats Cards - REPLACED Active Staff with Weekly Payroll */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-4">
@@ -225,13 +236,14 @@ export const StaffWagesPage = () => {
           </CardContent>
         </Card>
 
+        {/* NEW: Weekly Payroll Card */}
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-green-600" />
+              <Calculator className="h-5 w-5 text-green-600" />
               <div>
-                <p className="text-sm text-gray-600">Active Staff</p>
-                <p className="text-2xl font-bold">{activeStaff}</p>
+                <p className="text-sm text-gray-600">Weekly Payroll</p>
+                <p className="text-2xl font-bold">${weeklyPayroll.toFixed(0)}</p>
               </div>
             </div>
           </CardContent>
@@ -328,7 +340,7 @@ export const StaffWagesPage = () => {
         isOpen={profileDialogOpen}
         onClose={() => setProfileDialogOpen(false)}
         staffId={selectedStaffId}
-        onStaffUpdate={handleStaffUpdate} // Pass the callback
+        onStaffUpdate={handleStaffUpdate}
       />
 
       <AddStaffDialog

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,13 +9,29 @@ import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
 import { Upload, File, X } from 'lucide-react';
 
-interface AddLicenceDialogProps {
+interface License {
+  id: string;
+  licence_name: string;
+  licence_type: string;
+  licence_number: string;
+  issuing_authority: string;
+  issue_date: string;
+  expiry_date: string;
+  status: 'Active' | 'Expired' | 'Pending' | 'Suspended';
+  cost?: number;
+  renewal_frequency?: string;
+  document_url?: string;
+  notes?: string;
+}
+
+interface EditLicenseDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  license: License | null;
   onSuccess: () => void;
 }
 
-export default function AddLicenceDialog({ open, onOpenChange, onSuccess }: AddLicenceDialogProps) {
+export default function EditLicenseDialog({ open, onOpenChange, license, onSuccess }: EditLicenseDialogProps) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -33,10 +49,27 @@ export default function AddLicenceDialog({ open, onOpenChange, onSuccess }: AddL
     notes: ''
   });
 
+  useEffect(() => {
+    if (license) {
+      setFormData({
+        licence_name: license.licence_name,
+        licence_type: license.licence_type,
+        licence_number: license.licence_number,
+        issuing_authority: license.issuing_authority,
+        issue_date: license.issue_date,
+        expiry_date: license.expiry_date,
+        status: license.status,
+        cost: license.cost?.toString() || '',
+        renewal_frequency: license.renewal_frequency || '',
+        notes: license.notes || ''
+      });
+      setSelectedFile(null);
+    }
+  }, [license]);
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      // Validate file type
       const allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
       if (!allowedTypes.includes(file.type)) {
         toast({
@@ -46,7 +79,6 @@ export default function AddLicenceDialog({ open, onOpenChange, onSuccess }: AddL
         });
         return;
       }
-      // Validate file size (max 5MB)
       if (file.size > 5 * 1024 * 1024) {
         toast({
           title: "File too large",
@@ -68,14 +100,12 @@ export default function AddLicenceDialog({ open, onOpenChange, onSuccess }: AddL
       const fileName = `${licenceId}-${Date.now()}.${fileExt}`;
       const filePath = `licences/${fileName}`;
 
-      // Upload file to Supabase Storage
       const { error: uploadError } = await supabase.storage
         .from('documents')
         .upload(filePath, selectedFile);
 
       if (uploadError) throw uploadError;
 
-      // Get public URL
       const { data: { publicUrl } } = supabase.storage
         .from('documents')
         .getPublicUrl(filePath);
@@ -96,11 +126,12 @@ export default function AddLicenceDialog({ open, onOpenChange, onSuccess }: AddL
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!license) return;
+
     setLoading(true);
 
     try {
-      // First, insert the licence record
-      const licenceData = {
+      const licenseData = {
         licence_name: formData.licence_name,
         licence_type: formData.licence_type,
         licence_number: formData.licence_number,
@@ -111,61 +142,38 @@ export default function AddLicenceDialog({ open, onOpenChange, onSuccess }: AddL
         cost: formData.cost ? parseFloat(formData.cost) : null,
         renewal_frequency: formData.renewal_frequency || null,
         notes: formData.notes || null,
-        created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
 
-      const { data: newLicence, error: licenceError } = await supabase
-        .from('licences')
-        .insert([licenceData])
-        .select()
-        .single();
-
-      if (licenceError) throw licenceError;
-
-      // If a file was selected, upload it and update the licence record
-      if (selectedFile && newLicence) {
-        const documentUrl = await uploadDocument(newLicence.id);
-        
-        if (documentUrl) {
-          const { error: updateError } = await supabase
-            .from('licences')
-            .update({ document_url: documentUrl })
-            .eq('id', newLicence.id);
-
-          if (updateError) {
-            console.error('Error updating document URL:', updateError);
-          }
-        }
+      // If a new file was selected, upload it
+      let documentUrl = license.document_url;
+      if (selectedFile) {
+        documentUrl = await uploadDocument(license.id);
       }
+
+      // Update the license record
+      const { error: updateError } = await supabase
+        .from('licences')
+        .update({
+          ...licenseData,
+          ...(documentUrl && { document_url: documentUrl })
+        })
+        .eq('id', license.id);
+
+      if (updateError) throw updateError;
 
       toast({
         title: "Success",
-        description: "Licence added successfully",
+        description: "License updated successfully",
       });
-
-      // Reset form
-      setFormData({
-        licence_name: '',
-        licence_type: '',
-        licence_number: '',
-        issuing_authority: '',
-        issue_date: '',
-        expiry_date: '',
-        status: 'Active',
-        cost: '',
-        renewal_frequency: '',
-        notes: ''
-      });
-      setSelectedFile(null);
 
       onSuccess();
       onOpenChange(false);
     } catch (error) {
-      console.error('Error adding licence:', error);
+      console.error('Error updating license:', error);
       toast({
         title: "Error",
-        description: "Failed to add licence",
+        description: "Failed to update license",
         variant: "destructive",
       });
     } finally {
@@ -173,33 +181,34 @@ export default function AddLicenceDialog({ open, onOpenChange, onSuccess }: AddL
     }
   };
 
+  if (!license) return null;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Add New Licence</DialogTitle>
+          <DialogTitle>Edit License</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="licence_name">Licence Name *</Label>
+              <Label htmlFor="licence_name">License Name *</Label>
               <Input
                 id="licence_name"
                 value={formData.licence_name}
                 onChange={(e) => setFormData({...formData, licence_name: e.target.value})}
-                placeholder="e.g., Main Restaurant Liquor Licence"
                 required
               />
             </div>
             
             <div>
-              <Label htmlFor="licence_type">Licence Type *</Label>
+              <Label htmlFor="licence_type">License Type *</Label>
               <Select 
                 value={formData.licence_type} 
                 onValueChange={(value) => setFormData({...formData, licence_type: value})}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select licence type" />
+                  <SelectValue placeholder="Select license type" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Liquor Licence">Liquor Licence</SelectItem>
@@ -218,12 +227,11 @@ export default function AddLicenceDialog({ open, onOpenChange, onSuccess }: AddL
           
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="licence_number">Licence Number *</Label>
+              <Label htmlFor="licence_number">License Number *</Label>
               <Input
                 id="licence_number"
                 value={formData.licence_number}
                 onChange={(e) => setFormData({...formData, licence_number: e.target.value})}
-                placeholder="e.g., LIQ123456"
                 required
               />
             </div>
@@ -234,7 +242,6 @@ export default function AddLicenceDialog({ open, onOpenChange, onSuccess }: AddL
                 id="issuing_authority"
                 value={formData.issuing_authority}
                 onChange={(e) => setFormData({...formData, issuing_authority: e.target.value})}
-                placeholder="e.g., SA Government"
                 required
               />
             </div>
@@ -269,7 +276,6 @@ export default function AddLicenceDialog({ open, onOpenChange, onSuccess }: AddL
                 step="0.01"
                 value={formData.cost}
                 onChange={(e) => setFormData({...formData, cost: e.target.value})}
-                placeholder="0.00"
               />
             </div>
           </div>
@@ -315,7 +321,10 @@ export default function AddLicenceDialog({ open, onOpenChange, onSuccess }: AddL
 
           {/* Document Upload Section */}
           <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
-            <Label htmlFor="document">Upload Document (PDF, JPG, PNG - Max 5MB)</Label>
+            <Label htmlFor="document">Upload New Document (PDF, JPG, PNG - Max 5MB)</Label>
+            <p className="text-sm text-gray-500 mb-2">
+              Current document: {license.document_url ? 'Uploaded' : 'No document'}
+            </p>
             <div className="mt-2">
               {!selectedFile ? (
                 <div className="flex items-center justify-center w-full">
@@ -384,7 +393,7 @@ export default function AddLicenceDialog({ open, onOpenChange, onSuccess }: AddL
               Cancel
             </Button>
             <Button type="submit" disabled={loading || uploading}>
-              {loading || uploading ? 'Processing...' : 'Add Licence'}
+              {loading || uploading ? 'Updating...' : 'Update License'}
             </Button>
           </div>
         </form>
