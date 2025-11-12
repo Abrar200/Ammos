@@ -3,22 +3,26 @@ import { StatsCard } from '../StatsCard';
 import { SupplierList } from '../SupplierList';
 import { ExpenseChart } from '../ExpenseChart';
 import { WeeklyTargetCard } from '../WeeklyTargetCard';
-import { DollarSign, TrendingUp, TrendingDown, Users, RefreshCw, Wifi, WifiOff } from 'lucide-react';
+import { DollarSign, TrendingUp, TrendingDown, Users, RefreshCw, Wifi, WifiOff, Calculator } from 'lucide-react';
 import { mockWeeklyData } from '@/data/mockData';
 import { useRevenueData } from '@/hooks/useRevenueData';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/lib/supabase';
 import { Supplier } from '@/types/supplier';
+import TakingsAnalytics from '../TakingsAnalytics';
 
 export const OverviewPage = () => {
   const { data: revenueData, loading, error, lastUpdated, refetch } = useRevenueData(30000);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [subscriptions, setSubscriptions] = useState<any[]>([]);
   const [payrollRecords, setPayrollRecords] = useState<any[]>([]);
+  const [takingsData, setTakingsData] = useState<any>(null);
   const [suppliersLoading, setSuppliersLoading] = useState(true);
   const [expensesLoading, setExpensesLoading] = useState(true);
+  const [takingsLoading, setTakingsLoading] = useState(true);
   const [suppliersError, setSuppliersError] = useState<string | null>(null);
 
   // Fetch all data sources for expense calculation
@@ -76,8 +80,67 @@ export const OverviewPage = () => {
     }
   };
 
+  // Fetch takings data for revenue calculations
+  const fetchTakingsData = async () => {
+    try {
+      setTakingsLoading(true);
+      
+      const now = new Date();
+      const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      const firstDayOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
+      const lastDayOfWeek = new Date(now.setDate(now.getDate() - now.getDay() + 6));
+
+      // Fetch this month's takings
+      const { data: monthlyTakings, error: monthlyError } = await supabase
+        .from('takings')
+        .select('*')
+        .gte('entry_date', firstDayOfMonth.toISOString().split('T')[0])
+        .lte('entry_date', lastDayOfMonth.toISOString().split('T')[0]);
+
+      // Fetch this week's takings
+      const { data: weeklyTakings, error: weeklyError } = await supabase
+        .from('takings')
+        .select('*')
+        .gte('entry_date', firstDayOfWeek.toISOString().split('T')[0])
+        .lte('entry_date', lastDayOfWeek.toISOString().split('T')[0]);
+
+      // Fetch today's takings
+      const today = new Date().toISOString().split('T')[0];
+      const { data: todayTakings, error: todayError } = await supabase
+        .from('takings')
+        .select('*')
+        .eq('entry_date', today);
+
+      if (monthlyError || weeklyError || todayError) {
+        console.error('Error fetching takings:', monthlyError || weeklyError || todayError);
+        return;
+      }
+
+      // Calculate totals
+      const monthlyRevenue = monthlyTakings?.reduce((sum, taking) => sum + taking.gross_takings, 0) || 0;
+      const weeklyRevenue = weeklyTakings?.reduce((sum, taking) => sum + taking.gross_takings, 0) || 0;
+      const todayRevenue = todayTakings?.[0]?.gross_takings || 0;
+
+      setTakingsData({
+        monthlyRevenue,
+        weeklyRevenue,
+        todayRevenue,
+        monthlyTakings: monthlyTakings || [],
+        weeklyTakings: weeklyTakings || [],
+        todayTakings: todayTakings?.[0] || null
+      });
+
+    } catch (error) {
+      console.error('Error fetching takings data:', error);
+    } finally {
+      setTakingsLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchAllExpenseData();
+    fetchTakingsData();
   }, []);
 
   // Calculate total expenses from all sources
@@ -131,16 +194,16 @@ export const OverviewPage = () => {
   const expenses = calculateTotalExpenses();
   const totalExpenses = expenses.total;
 
-  // Calculate profit using $247,000 monthly revenue
-  const totalRevenue = 247000;
+  // Calculate revenue and profit using takings data
+  const totalRevenue = takingsData?.monthlyRevenue || 0;
   const profit = totalRevenue - totalExpenses;
 
   // Prepare revenue chart data
   const revenueChartData = [
-    { name: 'Today', amount: revenueData?.todayRevenue || 2845 },
-    { name: 'This Week', amount: revenueData?.weekRevenue || 18320 },
-    { name: 'This Month', amount: 247000 }, // Fixed value
-    { name: 'This Year', amount: revenueData?.yearRevenue || 1250000 }
+    { name: 'Today', amount: takingsData?.todayRevenue || 0 },
+    { name: 'This Week', amount: takingsData?.weeklyRevenue || 0 },
+    { name: 'This Month', amount: totalRevenue },
+    { name: 'This Year', amount: revenueData?.yearRevenue || (totalRevenue * 12) }
   ];
 
   // Prepare expense chart data by category
@@ -150,12 +213,11 @@ export const OverviewPage = () => {
     { name: 'Payroll', amount: expenses.payroll }
   ].filter(item => item.amount > 0);
 
-  // Add supplier category breakdown if available
-  const suppliersByCategory = suppliers.reduce((acc, supplier) => {
-    const category = supplier.supplier_type || 'Other';
-    acc[category] = (acc[category] || 0) + (supplier.monthly_total || 0);
-    return acc;
-  }, {} as Record<string, number>);
+  const handleRefresh = () => {
+    refetch();
+    fetchAllExpenseData();
+    fetchTakingsData();
+  };
 
   return (
     <div className="space-y-6">
@@ -177,14 +239,11 @@ export const OverviewPage = () => {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => {
-              refetch();
-              fetchAllExpenseData();
-            }}
-            disabled={loading || expensesLoading}
+            onClick={handleRefresh}
+            disabled={loading || expensesLoading || takingsLoading}
             className="flex items-center gap-2"
           >
-            <RefreshCw className={`h-4 w-4 ${(loading || expensesLoading) ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 ${(loading || expensesLoading || takingsLoading) ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
         </div>
@@ -211,17 +270,17 @@ export const OverviewPage = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatsCard
           title="Today's Revenue"
-          value={`$${(revenueData?.todayRevenue || 2845).toLocaleString('en-AU', { minimumFractionDigits: 2 })}`}
-          change={`${revenueData?.todayTransactions || 45} transactions`}
-          changeType="positive"
+          value={`$${(takingsData?.todayRevenue || 0).toLocaleString('en-AU', { minimumFractionDigits: 2 })}`}
+          change={takingsData?.todayTakings ? `${takingsData.todayTakings.pos_amount.toFixed(2)} POS` : 'No entry today'}
+          changeType={takingsData?.todayRevenue > 0 ? "positive" : "neutral"}
           icon={DollarSign}
           isLive={!error}
         />
         <StatsCard
           title="Monthly Revenue"
           value={`$${totalRevenue.toLocaleString('en-AU', { minimumFractionDigits: 2 })}`}
-          change="+12% from last month"
-          changeType="positive"
+          change={`${takingsData?.monthlyTakings?.length || 0} days recorded`}
+          changeType={totalRevenue > 0 ? "positive" : "neutral"}
           icon={TrendingUp}
           isLive={!error}
         />
@@ -241,6 +300,19 @@ export const OverviewPage = () => {
           isLive={!error}
         />
       </div>
+
+      {/* Takings Summary Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Calculator className="h-5 w-5" />
+            This Week's Takings Summary
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <TakingsAnalytics compact={true} />
+        </CardContent>
+      </Card>
 
       {/* Expense Breakdown Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -273,42 +345,11 @@ export const OverviewPage = () => {
       <div className="w-full">
         <WeeklyTargetCard
           weeklyTarget={mockWeeklyData.weeklyTarget}
-          currentWeekRevenue={revenueData?.weekRevenue || mockWeeklyData.currentWeekRevenue}
+          currentWeekRevenue={takingsData?.weeklyRevenue || 0}
           currentWeekExpenses={totalExpenses / 4.33}
           isLive={!error}
         />
       </div>
-
-      {/* Live Revenue Metrics */}
-      {revenueData && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <div className="bg-white p-6 rounded-lg shadow-sm border">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Average Order Value</h3>
-            <p className="text-3xl font-bold text-green-600">
-              ${revenueData.averageOrderValue.toFixed(2)}
-            </p>
-            <p className="text-sm text-gray-500 mt-1">Per transaction today</p>
-          </div>
-
-          <div className="bg-white p-6 rounded-lg shadow-sm border">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Selling Item</h3>
-            <p className="text-lg font-bold text-blue-600">
-              {revenueData.topSellingItems[0]?.name || 'No data'}
-            </p>
-            <p className="text-sm text-gray-500 mt-1">
-              {revenueData.topSellingItems[0]?.quantity || 0} sold this month
-            </p>
-          </div>
-
-          <div className="bg-white p-6 rounded-lg shadow-sm border">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Sales Trend</h3>
-            <p className="text-3xl font-bold text-purple-600">
-              {revenueData.todayTransactions}
-            </p>
-            <p className="text-sm text-gray-500 mt-1">Transactions today</p>
-          </div>
-        </div>
-      )}
 
       {/* Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

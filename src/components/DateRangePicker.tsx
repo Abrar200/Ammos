@@ -5,53 +5,73 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
-interface DateRange {
-  from: string;
-  to: string;
+// Updated: use Date instead of string
+export interface DateRange {
+  from: Date | null;
+  to: Date | null;
 }
 
 interface DateRangePickerProps {
   dateRange: DateRange;
   onDateRangeChange: (range: DateRange) => void;
   onClear: () => void;
+  className?: string;
 }
 
-export const DateRangePicker = ({ dateRange, onDateRangeChange, onClear }: DateRangePickerProps) => {
+export const DateRangePicker = ({
+  dateRange,
+  onDateRangeChange,
+  onClear,
+  className,
+}: DateRangePickerProps) => {
   const [isOpen, setIsOpen] = useState(false);
 
-  const handleFromDateChange = (date: string) => {
-    onDateRangeChange({ ...dateRange, from: date });
+  // Handle change events and convert input strings to Date objects
+  const handleFromDateChange = (dateString: string) => {
+    const newDate = dateString ? new Date(dateString) : null;
+    onDateRangeChange({ ...dateRange, from: newDate });
   };
 
-  const handleToDateChange = (date: string) => {
-    onDateRangeChange({ ...dateRange, to: date });
+  const handleToDateChange = (dateString: string) => {
+    const newDate = dateString ? new Date(dateString) : null;
+    onDateRangeChange({ ...dateRange, to: newDate });
   };
 
+  // Convert Date objects into readable display strings
   const formatDateRange = () => {
-    if (!dateRange.from && !dateRange.to) return 'Select date range';
-    if (dateRange.from && dateRange.to) {
-      return `${dateRange.from} - ${dateRange.to}`;
-    }
-    if (dateRange.from) return `From ${dateRange.from}`;
-    if (dateRange.to) return `Until ${dateRange.to}`;
+    const from = dateRange.from
+      ? dateRange.from.toISOString().split('T')[0]
+      : '';
+    const to = dateRange.to ? dateRange.to.toISOString().split('T')[0] : '';
+
+    if (!from && !to) return 'Select date range';
+    if (from && to) return `${from} - ${to}`;
+    if (from) return `From ${from}`;
+    if (to) return `Until ${to}`;
     return 'Select date range';
   };
 
-  const hasDateRange = dateRange.from || dateRange.to;
+  const hasDateRange = !!(dateRange.from || dateRange.to);
 
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" className="border-gray-300 hover:bg-gray-50 min-w-[200px] justify-start">
+        <Button
+          variant="outline"
+          className="border-gray-300 hover:bg-gray-50 min-w-[200px] justify-start"
+        >
           <Calendar className="w-4 h-4 mr-2" />
           {formatDateRange()}
         </Button>
       </PopoverTrigger>
+
       <PopoverContent className="w-80 p-0" align="end">
         <Card className="border-0 shadow-lg">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium">Filter by Date Range</CardTitle>
+              <CardTitle className="text-sm font-medium">
+                Filter by Date Range
+              </CardTitle>
               {hasDateRange && (
                 <Button
                   variant="ghost"
@@ -67,25 +87,38 @@ export const DateRangePicker = ({ dateRange, onDateRangeChange, onClear }: DateR
               )}
             </div>
           </CardHeader>
+
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <label className="text-xs font-medium text-gray-600">From Date</label>
+              <label className="text-xs font-medium text-gray-600">
+                From Date
+              </label>
               <Input
                 type="date"
-                value={dateRange.from}
+                value={
+                  dateRange.from
+                    ? dateRange.from.toISOString().split('T')[0]
+                    : ''
+                }
                 onChange={(e) => handleFromDateChange(e.target.value)}
                 className="border-gray-300 focus:border-slate-400 focus:ring-slate-400"
               />
             </div>
+
             <div className="space-y-2">
-              <label className="text-xs font-medium text-gray-600">To Date</label>
+              <label className="text-xs font-medium text-gray-600">
+                To Date
+              </label>
               <Input
                 type="date"
-                value={dateRange.to}
+                value={
+                  dateRange.to ? dateRange.to.toISOString().split('T')[0] : ''
+                }
                 onChange={(e) => handleToDateChange(e.target.value)}
                 className="border-gray-300 focus:border-slate-400 focus:ring-slate-400"
               />
             </div>
+
             <div className="flex gap-2 pt-2">
               <Button
                 size="sm"

@@ -16,7 +16,8 @@ import {
   Inbox,
   ClipboardList,
   Camera,
-  ShoppingCart
+  ShoppingCart,
+  Calculator
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -27,6 +28,7 @@ interface DashboardNavProps {
 
 const navItems = [
   { id: 'overview', label: 'Overview', icon: Home },
+  { id: 'takings', label: 'Takings', icon: Calculator }, // Add this line - right after Overview
   { id: 'ordering', label: 'Ordering', icon: ShoppingCart },
   { id: 'outgoings', label: 'Outgoings', icon: BarChart3 },
   { id: 'suppliers', label: 'Suppliers', icon: Users },

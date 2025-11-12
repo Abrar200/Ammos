@@ -18,15 +18,18 @@ import { TasksNotesPage } from './pages/TasksNotesPage';
 import { SurveillancePage } from './pages/SurveillancePage';
 import { ProtectedRoute } from './ProtectedRoute';
 import { useAuth } from '@/contexts/AuthContext';
+import TakingsPage from './pages/TakingsPage';
 
 export const Dashboard = () => {
   const [currentPage, setCurrentPage] = useState('overview');
-  const { signOut } = useAuth();
+  const { signOut, user } = useAuth();
 
   const renderPage = () => {
     switch (currentPage) {
       case 'overview':
         return <ProtectedRoute permission="dashboard"><OverviewPage /></ProtectedRoute>;
+      case 'takings': // Add this case
+        return <ProtectedRoute permission="takings"><TakingsPage /></ProtectedRoute>;
       case 'ordering':
         return <ProtectedRoute permission="ordering"><OrderingPage /></ProtectedRoute>;
       case 'suppliers':
@@ -67,7 +70,7 @@ export const Dashboard = () => {
       <DashboardNav currentPage={currentPage} onPageChange={setCurrentPage} />
 
       <div className="flex-1 flex flex-col">
-        <DashboardHeader onLogout={signOut} />
+        <DashboardHeader user={user} onLogout={signOut} />
 
         <main className="flex-1 p-6">
           {renderPage()}

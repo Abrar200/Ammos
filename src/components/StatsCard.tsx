@@ -6,7 +6,7 @@ interface StatsCardProps {
   title: string;
   value: string;
   change: string;
-  changeType: 'positive' | 'negative';
+  changeType: 'positive' | 'negative' | 'neutral';
   icon: LucideIcon;
   isLive?: boolean;
 }
