@@ -1,6 +1,7 @@
 import { LoginForm } from '@/features/auth/components/LoginForm';
-import { Dashboard } from '@/components/Dashboard';
+import { DashboardLayout } from '@/components/DashboardLayout';
 import { useAuth } from '@/contexts/AuthContext';
+import { Navigate } from 'react-router-dom';
 
 const Index = () => {
   const { user, loading } = useAuth();
@@ -22,8 +23,8 @@ const Index = () => {
     return <LoginForm />;
   }
 
-  // If user is authenticated, show dashboard
-  return <Dashboard />;
+  // If user is authenticated, redirect to overview page
+  return <Navigate to="/" replace />;
 };
 
 export default Index;

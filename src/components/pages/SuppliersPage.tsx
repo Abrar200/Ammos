@@ -8,6 +8,7 @@ import { AddSupplierDialog } from '@/components/AddSupplierDialog';
 import { EditSupplierDialog } from '@/components/EditSupplierDialog';
 import { supabase } from '@/lib/supabase';
 import { Supplier } from '@/types/supplier';
+import { useNavigate } from 'react-router-dom';
 
 export const SuppliersPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -16,8 +17,14 @@ export const SuppliersPage = () => {
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
+  const navigate = useNavigate();
 
-  const categories = ['all', 'food', 'cleaning', 'software', 'utilities', 'office', 'marketing'];
+  // Get unique categories from suppliers
+  const categories = ['all', ...Array.from(new Set(suppliers
+    .map(s => s.supplier_type?.toLowerCase())
+    .filter(Boolean)
+  )) as string[]];
+  
 
   const fetchSuppliers = async () => {
     try {
@@ -77,10 +84,20 @@ export const SuppliersPage = () => {
     }
   };
 
+  const handleViewProducts = (supplierId: string, supplierName: string) => {
+    navigate('/ordering', { 
+      state: { 
+        supplierFilter: supplierId,
+        supplierName: supplierName
+      }
+    });
+  };
+
   const filteredSuppliers = suppliers.filter(supplier => {
     const matchesSearch = supplier.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          supplier.email?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = selectedCategory === 'all' || supplier.supplier_type?.toLowerCase() === selectedCategory;
+    const matchesCategory = selectedCategory === 'all' || 
+                           supplier.supplier_type?.toLowerCase() === selectedCategory;
     return matchesSearch && matchesCategory;
   });
 
@@ -120,7 +137,7 @@ export const SuppliersPage = () => {
               size="sm"
               onClick={() => setSelectedCategory(category)}
             >
-              {category.charAt(0).toUpperCase() + category.slice(1)}
+              {category === 'all' ? 'All Categories' : category.charAt(0).toUpperCase() + category.slice(1)}
             </Button>
           ))}
         </div>
@@ -176,7 +193,9 @@ export const SuppliersPage = () => {
                   )}
                   <div className="flex-1">
                     <CardTitle className="text-lg">{supplier.name}</CardTitle>
-                    <Badge variant="secondary" className="mt-1">{supplier.supplier_type}</Badge>
+                    <Badge variant="secondary" className="mt-1">
+                      {supplier.supplier_type || 'Uncategorized'}
+                    </Badge>
                   </div>
                 </div>
                 <div className="flex gap-1">
@@ -213,16 +232,16 @@ export const SuppliersPage = () => {
               <div className="space-y-2">
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-600">Payment Frequency:</span>
-                  <span className="text-sm font-medium">{supplier.payment_frequency}</span>
+                  <span className="text-sm font-medium">{supplier.payment_frequency || 'Not specified'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-600">Amount per Period:</span>
-                  <span className="text-sm font-medium">${supplier.amount_per_period?.toFixed(2)}</span>
+                  <span className="text-sm font-medium">${supplier.amount_per_period?.toFixed(2) || '0.00'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-600">Monthly Cost:</span>
                   <span className="text-sm font-medium text-blue-600">
-                    ${supplier.monthly_total?.toFixed(2)}
+                    ${supplier.monthly_total?.toFixed(2) || '0.00'}
                   </span>
                 </div>
                 {supplier.email && (
@@ -247,8 +266,13 @@ export const SuppliersPage = () => {
                   </div>
                 )}
                 
-                <Button variant="outline" size="sm" className="w-full mt-4">
-                  View Payment History
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="w-full mt-4"
+                  onClick={() => handleViewProducts(supplier.id, supplier.name)}
+                >
+                  View Products
                 </Button>
               </div>
             </CardContent>
