@@ -1,66 +1,53 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Calendar, User, Building, AlertCircle, CheckCircle } from 'lucide-react';
-
-interface Task {
-  id: string;
-  title: string;
-  description: string;
-  category: 'supplier' | 'staff' | 'general';
-  priority: 'low' | 'medium' | 'high';
-  status: 'pending' | 'completed';
-  assignedTo?: string;
-  dueDate?: string;
-  createdAt: string;
-}
+import { Plus, Calendar, User, Building, AlertCircle, CheckCircle, Trash2 } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { useToast } from '@/hooks/use-toast';
+import { Task, TaskFormData } from '@/types/tasks';
 
 export const TasksNotesPage = () => {
-  const [tasks, setTasks] = useState<Task[]>([
-    {
-      id: '1',
-      title: 'Review seafood pricing',
-      description: 'Compare current Ocean Fresh Seafood prices with competitors',
-      category: 'supplier',
-      priority: 'medium',
-      status: 'pending',
-      dueDate: '2024-01-20',
-      createdAt: '2024-01-15'
-    },
-    {
-      id: '2',
-      title: 'Staff RSA renewal reminder',
-      description: 'Emma Wilson RSA certificate expires in 2 weeks',
-      category: 'staff',
-      priority: 'high',
-      status: 'pending',
-      assignedTo: 'Emma Wilson',
-      dueDate: '2024-01-25',
-      createdAt: '2024-01-14'
-    },
-    {
-      id: '3',
-      title: 'Update supplier contact info',
-      description: 'Fresh Valley Produce changed their phone number',
-      category: 'supplier',
-      priority: 'low',
-      status: 'completed',
-      createdAt: '2024-01-10'
-    }
-  ]);
-
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [newTask, setNewTask] = useState({
+  const [newTask, setNewTask] = useState<TaskFormData>({
     title: '',
     description: '',
-    category: 'general' as const,
-    priority: 'medium' as const,
-    dueDate: ''
+    category: 'general',
+    priority: 'medium',
+    due_date: '',
+    assigned_to: ''
   });
+  const { toast } = useToast();
+
+  useEffect(() => {
+    fetchTasks();
+  }, []);
+
+  const fetchTasks = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setTasks(data || []);
+    } catch (error) {
+      console.error('Error fetching tasks:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load tasks",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -79,30 +66,120 @@ export const TasksNotesPage = () => {
     }
   };
 
-  const handleAddTask = () => {
-    if (newTask.title.trim()) {
-      const task: Task = {
-        id: Date.now().toString(),
-        ...newTask,
+  const handleAddTask = async () => {
+    if (!newTask.title.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter a task title",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const taskData = {
+        title: newTask.title,
+        description: newTask.description,
+        category: newTask.category,
+        priority: newTask.priority,
         status: 'pending',
-        createdAt: new Date().toISOString().split('T')[0]
+        due_date: newTask.due_date || null,
+        assigned_to: newTask.assigned_to || null
       };
-      setTasks([task, ...tasks]);
-      setNewTask({ title: '', description: '', category: 'general', priority: 'medium', dueDate: '' });
+
+      const { data, error } = await supabase
+        .from('tasks')
+        .insert([taskData])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Task added successfully",
+      });
+
+      setTasks([data, ...tasks]);
+      setNewTask({ 
+        title: '', 
+        description: '', 
+        category: 'general', 
+        priority: 'medium', 
+        due_date: '',
+        assigned_to: ''
+      });
       setShowAddForm(false);
+    } catch (error) {
+      console.error('Error adding task:', error);
+      toast({
+        title: "Error",
+        description: "Failed to add task",
+        variant: "destructive",
+      });
     }
   };
 
-  const toggleTaskStatus = (id: string) => {
-    setTasks(tasks.map(task => 
-      task.id === id 
-        ? { ...task, status: task.status === 'pending' ? 'completed' : 'pending' }
-        : task
-    ));
+  const toggleTaskStatus = async (id: string, currentStatus: string) => {
+    try {
+      const newStatus = currentStatus === 'pending' ? 'completed' : 'pending';
+      
+      const { error } = await supabase
+        .from('tasks')
+        .update({ status: newStatus })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setTasks(tasks.map(task => 
+        task.id === id ? { ...task, status: newStatus } : task
+      ));
+
+      toast({
+        title: "Success",
+        description: `Task marked as ${newStatus}`,
+      });
+    } catch (error) {
+      console.error('Error updating task:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update task",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const deleteTask = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('tasks')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setTasks(tasks.filter(task => task.id !== id));
+
+      toast({
+        title: "Success",
+        description: "Task deleted successfully",
+      });
+    } catch (error) {
+      console.error('Error deleting task:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete task",
+        variant: "destructive",
+      });
+    }
   };
 
   const pendingTasks = tasks.filter(task => task.status === 'pending');
   const completedTasks = tasks.filter(task => task.status === 'completed');
+
+  if (loading) {
+    return <div className="p-6">Loading tasks...</div>;
+  }
 
   return (
     <div className="space-y-6">
@@ -124,7 +201,7 @@ export const TasksNotesPage = () => {
           </CardHeader>
           <CardContent className="space-y-4">
             <Input
-              placeholder="Task title"
+              placeholder="Task title *"
               value={newTask.title}
               onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
             />
@@ -133,7 +210,7 @@ export const TasksNotesPage = () => {
               value={newTask.description}
               onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
             />
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <Select value={newTask.category} onValueChange={(value: any) => setNewTask({ ...newTask, category: value })}>
                 <SelectTrigger>
                   <SelectValue placeholder="Category" />
@@ -156,8 +233,14 @@ export const TasksNotesPage = () => {
               </Select>
               <Input
                 type="date"
-                value={newTask.dueDate}
-                onChange={(e) => setNewTask({ ...newTask, dueDate: e.target.value })}
+                placeholder="Due date"
+                value={newTask.due_date}
+                onChange={(e) => setNewTask({ ...newTask, due_date: e.target.value })}
+              />
+              <Input
+                placeholder="Assign to"
+                value={newTask.assigned_to}
+                onChange={(e) => setNewTask({ ...newTask, assigned_to: e.target.value })}
               />
             </div>
             <div className="flex space-x-2">
@@ -183,33 +266,49 @@ export const TasksNotesPage = () => {
                       {getCategoryIcon(task.category)}
                       <h4 className="font-medium">{task.title}</h4>
                     </div>
-                    <Badge className={getPriorityColor(task.priority)}>
-                      {task.priority}
-                    </Badge>
+                    <div className="flex items-center space-x-2">
+                      <Badge className={getPriorityColor(task.priority)}>
+                        {task.priority}
+                      </Badge>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => deleteTask(task.id)}
+                        className="h-8 w-8 p-0 text-gray-400 hover:text-red-600"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                   <p className="text-sm text-gray-600 mb-3">{task.description}</p>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4 text-sm text-gray-500">
-                      {task.dueDate && (
+                      {task.due_date && (
                         <div className="flex items-center space-x-1">
                           <Calendar className="h-4 w-4" />
-                          <span>Due {task.dueDate}</span>
+                          <span>Due {new Date(task.due_date).toLocaleDateString()}</span>
                         </div>
                       )}
-                      {task.assignedTo && (
+                      {task.assigned_to && (
                         <div className="flex items-center space-x-1">
                           <User className="h-4 w-4" />
-                          <span>{task.assignedTo}</span>
+                          <span>{task.assigned_to}</span>
                         </div>
                       )}
                     </div>
-                    <Button size="sm" onClick={() => toggleTaskStatus(task.id)}>
+                    <Button size="sm" onClick={() => toggleTaskStatus(task.id, task.status)}>
                       <CheckCircle className="h-4 w-4 mr-1" />
                       Complete
                     </Button>
                   </div>
                 </div>
               ))}
+              {pendingTasks.length === 0 && (
+                <div className="text-center py-8 text-gray-500">
+                  <AlertCircle className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                  <p>No pending tasks</p>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -226,13 +325,52 @@ export const TasksNotesPage = () => {
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex items-center space-x-2">
                       {getCategoryIcon(task.category)}
-                      <h4 className="font-medium text-gray-700">{task.title}</h4>
+                      <h4 className="font-medium text-gray-700 line-through">{task.title}</h4>
                     </div>
-                    <CheckCircle className="h-5 w-5 text-green-500" />
+                    <div className="flex items-center space-x-2">
+                      <CheckCircle className="h-5 w-5 text-green-500" />
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => deleteTask(task.id)}
+                        className="h-8 w-8 p-0 text-gray-400 hover:text-red-600"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
-                  <p className="text-sm text-gray-600">{task.description}</p>
+                  <p className="text-sm text-gray-600 line-through">{task.description}</p>
+                  <div className="flex items-center justify-between mt-3">
+                    <div className="flex items-center space-x-4 text-sm text-gray-500">
+                      {task.due_date && (
+                        <div className="flex items-center space-x-1">
+                          <Calendar className="h-4 w-4" />
+                          <span>Due {new Date(task.due_date).toLocaleDateString()}</span>
+                        </div>
+                      )}
+                      {task.assigned_to && (
+                        <div className="flex items-center space-x-1">
+                          <User className="h-4 w-4" />
+                          <span>{task.assigned_to}</span>
+                        </div>
+                      )}
+                    </div>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => toggleTaskStatus(task.id, task.status)}
+                    >
+                      Reopen
+                    </Button>
+                  </div>
                 </div>
               ))}
+              {completedTasks.length === 0 && (
+                <div className="text-center py-8 text-gray-500">
+                  <CheckCircle className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                  <p>No completed tasks</p>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

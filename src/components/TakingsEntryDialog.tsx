@@ -53,9 +53,9 @@ export default function TakingsEntryDialog({ open, onOpenChange, editingTaking, 
   }, [editingTaking, open]);
 
   const calculateGross = () => {
-    return (formData.eft_amount || 0) + (formData.cash_amount || 0);
+    return (formData.eft_amount || 0) + ((formData.cash_amount || 0) - CASH_FLOAT);
   };
-
+  
   const calculateCashToBank = () => {
     return (formData.cash_amount || 0) - CASH_FLOAT;
   };
@@ -228,31 +228,33 @@ export default function TakingsEntryDialog({ open, onOpenChange, editingTaking, 
           {/* Calculations Display */}
           <Card>
             <CardContent className="p-4">
-              <h4 className="font-semibold mb-3">Auto Calculations</h4>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <h4 className="font-semibold mb-3">Auto Calculations</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <div>
-                  <p className="text-gray-600">Gross Takings</p>
-                  <p className="text-lg font-bold text-green-600">
-                    ${grossTakings.toFixed(2)}
-                  </p>
+                    <p className="text-gray-600">Gross Takings</p>
+                    <p className="text-lg font-bold text-green-600">
+                    ${calculateGross().toFixed(2)}
+                    </p>
+                    <p className="text-xs text-gray-500">EFT + Psila</p>
                 </div>
                 <div>
-                  <p className="text-gray-600">Cash Float</p>
-                  <p className="text-lg font-mono">${CASH_FLOAT.toFixed(2)}</p>
+                    <p className="text-gray-600">Cash Float</p>
+                    <p className="text-lg font-mono">${CASH_FLOAT.toFixed(2)}</p>
                 </div>
                 <div>
-                  <p className="text-gray-600">Cash to Bank</p>
-                  <p className={`text-lg font-bold ${cashToBank >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                    ${cashToBank.toFixed(2)}
-                  </p>
+                    <p className="text-gray-600">Psila</p>
+                    <p className={`text-lg font-bold ${calculateCashToBank() >= 0 ? 'text-purple-600' : 'text-red-600'}`}>
+                    ${calculateCashToBank().toFixed(2)}
+                    </p>
+                    <p className="text-xs text-gray-500">Cash - $300</p>
                 </div>
                 <div>
-                  <p className="text-gray-600">POS vs Actual</p>
-                  <p className={`text-lg font-bold ${grossTakings >= formData.pos_amount ? 'text-green-600' : 'text-red-600'}`}>
-                    ${(grossTakings - formData.pos_amount).toFixed(2)}
-                  </p>
+                    <p className="text-gray-600">POS vs Actual</p>
+                    <p className={`text-lg font-bold ${calculateGross() >= formData.pos_amount ? 'text-green-600' : 'text-red-600'}`}>
+                    ${(calculateGross() - formData.pos_amount).toFixed(2)}
+                    </p>
                 </div>
-              </div>
+                </div>
             </CardContent>
           </Card>
 

@@ -7,19 +7,19 @@ export interface Taking {
     cash_amount: number;
     cash_float: number;
     notes?: string;
-    gross_takings: number;
-    cash_to_bank: number;
+    gross_takings: number; // EFT + (Cash - 300)
+    cash_to_bank: number;  // Cash - 300 (Psila)
     created_at: string;
     updated_at: string;
     created_by?: string;
   }
   
   export interface TakingsSummary {
-    totalGross: number;
+    totalGross: number;    // Total of (EFT + Psila)
     totalPOS: number;
     totalEFT: number;
     totalCash: number;
-    totalCashToBank: number;
+    totalPsila: number;    // Total of (Cash - 300)
   }
   
   export interface TakingsFormData {

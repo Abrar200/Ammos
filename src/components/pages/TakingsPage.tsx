@@ -152,7 +152,7 @@ export default function TakingsPage() {
                   <TableHead>EFT</TableHead>
                   <TableHead>Cash</TableHead>
                   <TableHead>Gross</TableHead>
-                  <TableHead>Cash to Bank</TableHead>
+                  <TableHead>Psila</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Notes</TableHead>
                   <TableHead>Actions</TableHead>
