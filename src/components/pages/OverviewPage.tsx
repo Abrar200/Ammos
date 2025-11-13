@@ -3,7 +3,7 @@ import { StatsCard } from '../StatsCard';
 import { SupplierList } from '../SupplierList';
 import { ExpenseChart } from '../ExpenseChart';
 import { WeeklyTargetCard } from '../WeeklyTargetCard';
-import { DollarSign, TrendingUp, TrendingDown, Users, RefreshCw, Wifi, WifiOff, Calculator } from 'lucide-react';
+import { DollarSign, TrendingUp, TrendingDown, Users, RefreshCw, Wifi, WifiOff, Calculator, Calendar } from 'lucide-react';
 import { mockWeeklyData } from '@/data/mockData';
 import { useRevenueData } from '@/hooks/useRevenueData';
 import { Button } from '@/components/ui/button';
@@ -88,8 +88,16 @@ export const OverviewPage = () => {
       const now = new Date();
       const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
       const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-      const firstDayOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
-      const lastDayOfWeek = new Date(now.setDate(now.getDate() - now.getDay() + 6));
+      
+      // Get start of current week (Sunday)
+      const firstDayOfWeek = new Date(now);
+      firstDayOfWeek.setDate(now.getDate() - now.getDay());
+      firstDayOfWeek.setHours(0, 0, 0, 0);
+      
+      // Get end of current week (Saturday)
+      const lastDayOfWeek = new Date(firstDayOfWeek);
+      lastDayOfWeek.setDate(firstDayOfWeek.getDate() + 6);
+      lastDayOfWeek.setHours(23, 59, 59, 999);
 
       // Fetch this month's takings
       const { data: monthlyTakings, error: monthlyError } = await supabase
@@ -122,10 +130,14 @@ export const OverviewPage = () => {
       const weeklyRevenue = weeklyTakings?.reduce((sum, taking) => sum + taking.gross_takings, 0) || 0;
       const todayRevenue = todayTakings?.[0]?.gross_takings || 0;
 
+      // Calculate weekly POS total for the change text
+      const weeklyPOSTotal = weeklyTakings?.reduce((sum, taking) => sum + taking.pos_amount, 0) || 0;
+
       setTakingsData({
         monthlyRevenue,
         weeklyRevenue,
         todayRevenue,
+        weeklyPOSTotal,
         monthlyTakings: monthlyTakings || [],
         weeklyTakings: weeklyTakings || [],
         todayTakings: todayTakings?.[0] || null
@@ -195,15 +207,16 @@ export const OverviewPage = () => {
   const totalExpenses = expenses.total;
 
   // Calculate revenue and profit using takings data
-  const totalRevenue = takingsData?.monthlyRevenue || 0;
-  const profit = totalRevenue - totalExpenses;
+  const monthlyRevenue = takingsData?.monthlyRevenue || 0;
+  const weeklyRevenue = takingsData?.weeklyRevenue || 0;
+  const profit = monthlyRevenue - totalExpenses;
 
   // Prepare revenue chart data
   const revenueChartData = [
     { name: 'Today', amount: takingsData?.todayRevenue || 0 },
-    { name: 'This Week', amount: takingsData?.weeklyRevenue || 0 },
-    { name: 'This Month', amount: totalRevenue },
-    { name: 'This Year', amount: revenueData?.yearRevenue || (totalRevenue * 12) }
+    { name: 'This Week', amount: weeklyRevenue },
+    { name: 'This Month', amount: monthlyRevenue },
+    { name: 'This Year', amount: revenueData?.yearRevenue || (monthlyRevenue * 12) }
   ];
 
   // Prepare expense chart data by category
@@ -269,34 +282,34 @@ export const OverviewPage = () => {
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatsCard
-          title="Today's Revenue"
-          value={`$${(takingsData?.todayRevenue || 0).toLocaleString('en-AU', { minimumFractionDigits: 2 })}`}
-          change={takingsData?.todayTakings ? `${takingsData.todayTakings.pos_amount.toFixed(2)} POS` : 'No entry today'}
-          changeType={takingsData?.todayRevenue > 0 ? "positive" : "neutral"}
-          icon={DollarSign}
+          title="Weekly Revenue"
+          value={`$${weeklyRevenue.toLocaleString('en-AU', { minimumFractionDigits: 2 })}`}
+          change={takingsData?.weeklyPOSTotal ? `${takingsData.weeklyPOSTotal.toFixed(2)} POS` : 'No data this week'}
+          changeType={weeklyRevenue > 0 ? "positive" : "neutral"}
+          icon={Calendar}
           isLive={!error}
         />
         <StatsCard
           title="Monthly Revenue"
-          value={`$${totalRevenue.toLocaleString('en-AU', { minimumFractionDigits: 2 })}`}
+          value={`$${monthlyRevenue.toLocaleString('en-AU', { minimumFractionDigits: 2 })}`}
           change={`${takingsData?.monthlyTakings?.length || 0} days recorded`}
-          changeType={totalRevenue > 0 ? "positive" : "neutral"}
+          changeType={monthlyRevenue > 0 ? "positive" : "neutral"}
           icon={TrendingUp}
           isLive={!error}
         />
         <StatsCard
-          title="Total Expenses"
+          title="Monthly Expenses"
           value={`$${totalExpenses.toLocaleString('en-AU', { minimumFractionDigits: 2 })}`}
           change={expensesLoading ? 'Calculating...' : 'Real-time data'}
           changeType="neutral"
           icon={TrendingDown}
         />
         <StatsCard
-          title="Net Profit"
+          title="Monthly Profit"
           value={`$${profit.toLocaleString('en-AU', { minimumFractionDigits: 2 })}`}
-          change={profit > 0 ? `${((profit / totalRevenue) * 100).toFixed(1)}% margin` : "Needs attention"}
+          change={profit > 0 ? `${((profit / monthlyRevenue) * 100).toFixed(1)}% margin` : "Needs attention"}
           changeType={profit > 0 ? "positive" : "negative"}
-          icon={TrendingUp}
+          icon={DollarSign}
           isLive={!error}
         />
       </div>
@@ -345,7 +358,7 @@ export const OverviewPage = () => {
       <div className="w-full">
         <WeeklyTargetCard
           weeklyTarget={mockWeeklyData.weeklyTarget}
-          currentWeekRevenue={takingsData?.weeklyRevenue || 0}
+          currentWeekRevenue={weeklyRevenue}
           currentWeekExpenses={totalExpenses / 4.33}
           isLive={!error}
         />
