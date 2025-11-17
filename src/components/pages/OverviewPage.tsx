@@ -7,12 +7,38 @@ import { DollarSign, TrendingUp, TrendingDown, Users, RefreshCw, Wifi, WifiOff, 
 import { mockWeeklyData } from '@/data/mockData';
 import { useRevenueData } from '@/hooks/useRevenueData';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/lib/supabase';
 import { Supplier } from '@/types/supplier';
 import TakingsAnalytics from '../TakingsAnalytics';
+import { toast } from "@/components/ui/use-toast"
+
+// Helper function to get Monday of current week in UTC
+const getMondayOfWeek = (date: Date) => {
+  const utcDate = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const day = utcDate.getUTCDay(); // 0 = Sunday, 1 = Monday, etc.
+  const monday = new Date(utcDate);
+  const diff = day === 0 ? -6 : 1 - day;
+  monday.setUTCDate(utcDate.getUTCDate() + diff);
+  monday.setUTCHours(0, 0, 0, 0);
+  return monday;
+};
+
+// Helper function to get Sunday of current week in UTC
+const getSundayOfWeek = (date: Date) => {
+  const monday = getMondayOfWeek(date);
+  const sunday = new Date(monday);
+  sunday.setUTCDate(monday.getUTCDate() + 6);
+  sunday.setUTCHours(23, 59, 59, 999);
+  return sunday;
+};
+
+// Helper to convert local date to UTC date string for Supabase
+const toUTCDateString = (date: Date) => {
+  return date.toISOString().split('T')[0];
+};
 
 export const OverviewPage = () => {
   const { data: revenueData, loading, error, lastUpdated, refetch } = useRevenueData(30000);
@@ -24,6 +50,7 @@ export const OverviewPage = () => {
   const [expensesLoading, setExpensesLoading] = useState(true);
   const [takingsLoading, setTakingsLoading] = useState(true);
   const [suppliersError, setSuppliersError] = useState<string | null>(null);
+  const [weeklyTrend, setWeeklyTrend] = useState<number>(0);
 
   // Fetch all data sources for expense calculation
   const fetchAllExpenseData = async () => {
@@ -80,71 +107,124 @@ export const OverviewPage = () => {
     }
   };
 
-  // Fetch takings data for revenue calculations
   const fetchTakingsData = async () => {
     try {
       setTakingsLoading(true);
       
       const now = new Date();
-      const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
       
-      // Get start of current week (Sunday)
-      const firstDayOfWeek = new Date(now);
-      firstDayOfWeek.setDate(now.getDate() - now.getDay());
-      firstDayOfWeek.setHours(0, 0, 0, 0);
+      // Get dates in UTC for consistent timezone handling
+      const firstDayOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+      const lastDayOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0));
       
-      // Get end of current week (Saturday)
-      const lastDayOfWeek = new Date(firstDayOfWeek);
-      lastDayOfWeek.setDate(firstDayOfWeek.getDate() + 6);
-      lastDayOfWeek.setHours(23, 59, 59, 999);
-
-      // Fetch this month's takings
-      const { data: monthlyTakings, error: monthlyError } = await supabase
-        .from('takings')
-        .select('*')
-        .gte('entry_date', firstDayOfMonth.toISOString().split('T')[0])
-        .lte('entry_date', lastDayOfMonth.toISOString().split('T')[0]);
-
-      // Fetch this week's takings
-      const { data: weeklyTakings, error: weeklyError } = await supabase
-        .from('takings')
-        .select('*')
-        .gte('entry_date', firstDayOfWeek.toISOString().split('T')[0])
-        .lte('entry_date', lastDayOfWeek.toISOString().split('T')[0]);
-
-      // Fetch today's takings
-      const today = new Date().toISOString().split('T')[0];
-      const { data: todayTakings, error: todayError } = await supabase
-        .from('takings')
-        .select('*')
-        .eq('entry_date', today);
-
-      if (monthlyError || weeklyError || todayError) {
-        console.error('Error fetching takings:', monthlyError || weeklyError || todayError);
-        return;
+      // Get current week (Monday to Sunday) in UTC
+      const currentWeekStart = getMondayOfWeek(now);
+      const currentWeekEnd = getSundayOfWeek(now);
+  
+      // Get previous week for trend calculation
+      const previousWeekStart = new Date(currentWeekStart);
+      const previousWeekEnd = new Date(currentWeekEnd);
+      previousWeekStart.setUTCDate(currentWeekStart.getUTCDate() - 7);
+      previousWeekEnd.setUTCDate(currentWeekEnd.getUTCDate() - 7);
+  
+      console.log('=== UTC DATE RANGES ===');
+      console.log('Current Week:', currentWeekStart.toUTCString(), 'to', currentWeekEnd.toUTCString());
+      console.log('Previous Week:', previousWeekStart.toUTCString(), 'to', previousWeekEnd.toUTCString());
+      console.log('Today (local):', now.toString());
+  
+      // Fetch all data using UTC date strings
+      const [
+        { data: monthlyTakings, error: monthlyError },
+        { data: currentWeekTakings, error: currentWeekError },
+        { data: previousWeekTakings, error: previousWeekError }
+      ] = await Promise.all([
+        supabase
+          .from('takings')
+          .select('*')
+          .gte('entry_date', toUTCDateString(firstDayOfMonth))
+          .lte('entry_date', toUTCDateString(lastDayOfMonth)),
+        supabase
+          .from('takings')
+          .select('*')
+          .gte('entry_date', toUTCDateString(currentWeekStart))
+          .lte('entry_date', toUTCDateString(currentWeekEnd))
+          .order('entry_date', { ascending: true }),
+        supabase
+          .from('takings')
+          .select('*')
+          .gte('entry_date', toUTCDateString(previousWeekStart))
+          .lte('entry_date', toUTCDateString(previousWeekEnd))
+          .order('entry_date', { ascending: true })
+      ]);
+  
+      // Handle errors
+      const errors = [monthlyError, currentWeekError, previousWeekError].filter(Boolean);
+      if (errors.length > 0) {
+        console.error('Errors fetching takings:', errors);
+        throw new Error(`Failed to fetch takings data: ${errors[0]?.message}`);
       }
-
+  
+      console.log('=== FETCHED DATA ===');
+      console.log('Current week takings:', currentWeekTakings?.map(t => ({
+        date: t.entry_date,
+        amount: t.gross_takings,
+        localDate: new Date(t.entry_date).toString()
+      })));
+  
+      // Calculate today's date in UTC for comparison
+      const todayUTC = toUTCDateString(new Date());
+      
+      // Filter to only include days up to today (no future dates)
+      const actualCurrentWeekTakings = currentWeekTakings?.filter(taking => 
+        taking.entry_date <= todayUTC
+      ) || [];
+  
+      console.log('=== FILTERED DATA ===');
+      console.log('Actual current week takings:', actualCurrentWeekTakings?.map(t => ({
+        date: t.entry_date,
+        amount: t.gross_takings
+      })));
+  
       // Calculate totals
       const monthlyRevenue = monthlyTakings?.reduce((sum, taking) => sum + taking.gross_takings, 0) || 0;
-      const weeklyRevenue = weeklyTakings?.reduce((sum, taking) => sum + taking.gross_takings, 0) || 0;
-      const todayRevenue = todayTakings?.[0]?.gross_takings || 0;
-
-      // Calculate weekly POS total for the change text
-      const weeklyPOSTotal = weeklyTakings?.reduce((sum, taking) => sum + taking.pos_amount, 0) || 0;
-
+      const currentWeekRevenue = actualCurrentWeekTakings?.reduce((sum, taking) => sum + taking.gross_takings, 0) || 0;
+      const previousWeekRevenue = previousWeekTakings?.reduce((sum, taking) => sum + taking.gross_takings, 0) || 0;
+      const todayRevenue = actualCurrentWeekTakings?.find(t => t.entry_date === todayUTC)?.gross_takings || 0;
+  
+      console.log('=== CALCULATIONS ===');
+      console.log('Current week revenue:', currentWeekRevenue);
+      console.log('Previous week revenue:', previousWeekRevenue);
+      console.log('Days with data this week:', actualCurrentWeekTakings.length);
+  
+      // Calculate weekly trend
+      const trend = previousWeekRevenue > 0 
+        ? ((currentWeekRevenue - previousWeekRevenue) / previousWeekRevenue) * 100 
+        : currentWeekRevenue > 0 ? 100 : 0;
+  
+      // Calculate weekly POS total
+      const weeklyPOSTotal = actualCurrentWeekTakings?.reduce((sum, taking) => sum + taking.pos_amount, 0) || 0;
+  
       setTakingsData({
         monthlyRevenue,
-        weeklyRevenue,
+        weeklyRevenue: currentWeekRevenue,
         todayRevenue,
         weeklyPOSTotal,
+        weeklyTrend: trend,
         monthlyTakings: monthlyTakings || [],
-        weeklyTakings: weeklyTakings || [],
-        todayTakings: todayTakings?.[0] || null
+        weeklyTakings: actualCurrentWeekTakings,
+        previousWeekTakings: previousWeekTakings || [],
+        todayTakings: actualCurrentWeekTakings?.find(t => t.entry_date === todayUTC) || null
       });
-
+  
+      setWeeklyTrend(trend);
+  
     } catch (error) {
       console.error('Error fetching takings data:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load takings data",
+        variant: "destructive",
+      });
     } finally {
       setTakingsLoading(false);
     }
@@ -232,6 +312,14 @@ export const OverviewPage = () => {
     fetchTakingsData();
   };
 
+  // Format trend text for weekly revenue
+  const getWeeklyTrendText = () => {
+    if (weeklyTrend === 0) return 'Same as last week';
+    const direction = weeklyTrend > 0 ? 'up' : 'down';
+    const percentage = Math.abs(weeklyTrend).toFixed(1);
+    return `${percentage}% ${direction} from last week`;
+  };
+
   return (
     <div className="space-y-6">
       {/* Live Data Status */}
@@ -284,8 +372,15 @@ export const OverviewPage = () => {
         <StatsCard
           title="Weekly Revenue"
           value={`$${weeklyRevenue.toLocaleString('en-AU', { minimumFractionDigits: 2 })}`}
-          change={takingsData?.weeklyPOSTotal ? `${takingsData.weeklyPOSTotal.toFixed(2)} POS` : 'No data this week'}
-          changeType={weeklyRevenue > 0 ? "positive" : "neutral"}
+          change={
+            takingsData?.weeklyTakings?.length > 0 
+              ? `${takingsData.weeklyTakings.length} day${takingsData.weeklyTakings.length !== 1 ? 's' : ''} recorded` 
+              : 'No data this week'
+          }
+          changeType={
+            weeklyTrend > 5 ? "positive" : 
+            weeklyTrend < -5 ? "negative" : "neutral"
+          }
           icon={Calendar}
           isLive={!error}
         />
@@ -319,14 +414,18 @@ export const OverviewPage = () => {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Calculator className="h-5 w-5" />
-            This Week's Takings Summary
+            This Week's Takings Summary (Mon-Sun)
           </CardTitle>
+          <CardDescription>
+            Showing data from {takingsData?.weeklyTakings?.length || 0} day{takingsData?.weeklyTakings?.length !== 1 ? 's' : ''} recorded this week
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <TakingsAnalytics compact={true} />
         </CardContent>
       </Card>
 
+      {/* Rest of the component remains the same */}
       {/* Expense Breakdown Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-white p-6 rounded-lg shadow-sm border">

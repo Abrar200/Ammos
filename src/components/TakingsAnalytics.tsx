@@ -7,18 +7,53 @@ import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
 import { Download, TrendingUp, CreditCard, Wallet, DollarSign, Building } from 'lucide-react';
 import { TakingsSummary } from '@/types/takings';
-import { format, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
+import { format, subDays, startOfMonth, endOfMonth } from 'date-fns';
 
 interface TakingsAnalyticsProps {
   onExport?: (data: any) => void;
   compact?: boolean;
 }
 
+// Helper function to get Monday of current week
+const getMondayOfWeek = (date: Date) => {
+  const day = date.getDay(); // 0 = Sunday, 1 = Monday, etc.
+  const diffToMonday = day === 0 ? -6 : 1 - day; // Adjust for Monday start
+  const monday = new Date(date);
+  monday.setDate(date.getDate() + diffToMonday);
+  monday.setHours(0, 0, 0, 0);
+  return monday;
+};
+
+// Helper function to get Sunday of current week
+const getSundayOfWeek = (date: Date) => {
+  const monday = getMondayOfWeek(date);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  sunday.setHours(23, 59, 59, 999);
+  return sunday;
+};
+
+// Helper function to get previous week (Monday to Sunday)
+const getPreviousWeek = (date: Date) => {
+  const currentMonday = getMondayOfWeek(date);
+  const previousMonday = new Date(currentMonday);
+  previousMonday.setDate(currentMonday.getDate() - 7);
+  
+  const previousSunday = new Date(previousMonday);
+  previousSunday.setDate(previousMonday.getDate() + 6);
+  previousSunday.setHours(23, 59, 59, 999);
+  
+  return {
+    from: previousMonday,
+    to: previousSunday
+  };
+};
+
 export default function TakingsAnalytics({ onExport, compact = false }: TakingsAnalyticsProps) {
   const { toast } = useToast();
   const [dateRange, setDateRange] = useState({
-    from: startOfWeek(new Date()),
-    to: endOfWeek(new Date())
+    from: getMondayOfWeek(new Date()), // Start with Monday of current week
+    to: getSundayOfWeek(new Date())     // End with Sunday of current week
   });
   const [summary, setSummary] = useState<TakingsSummary>({
     totalGross: 0,
@@ -110,10 +145,45 @@ export default function TakingsAnalytics({ onExport, compact = false }: TakingsA
   };
 
   const quickDateRanges = [
-    { label: 'Today', getRange: () => ({ from: new Date(), to: new Date() }) },
-    { label: 'Yesterday', getRange: () => ({ from: subDays(new Date(), 1), to: subDays(new Date(), 1) }) },
-    { label: 'This Week', getRange: () => ({ from: startOfWeek(new Date()), to: endOfWeek(new Date()) }) },
-    { label: 'This Month', getRange: () => ({ from: startOfMonth(new Date()), to: endOfMonth(new Date()) }) },
+    { 
+      label: 'Today', 
+      getRange: () => {
+        const today = new Date();
+        return { from: today, to: today };
+      }
+    },
+    { 
+      label: 'Yesterday', 
+      getRange: () => {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        return { from: yesterday, to: yesterday };
+      }
+    },
+    { 
+      label: 'This Week', 
+      getRange: () => ({
+        from: getMondayOfWeek(new Date()),
+        to: getSundayOfWeek(new Date())
+      })
+    },
+    { 
+      label: 'Last Week', 
+      getRange: () => {
+        const lastWeekRange = getPreviousWeek(new Date());
+        return {
+          from: lastWeekRange.from,
+          to: lastWeekRange.to
+        };
+      }
+    },
+    { 
+      label: 'This Month', 
+      getRange: () => ({
+        from: startOfMonth(new Date()),
+        to: endOfMonth(new Date())
+      })
+    },
   ];
 
   // If compact mode, show only summary cards
@@ -178,18 +248,15 @@ export default function TakingsAnalytics({ onExport, compact = false }: TakingsA
             ))}
           </div>
           
-          
           <DateRangePicker
             dateRange={dateRange}
             onDateRangeChange={setDateRange}
-            onClear={() => setDateRange({ from: null, to: null })}
+            onClear={() => setDateRange({
+              from: getMondayOfWeek(new Date()),
+              to: getSundayOfWeek(new Date())
+            })}
             className="w-full sm:w-auto"
           />
-          
-          <Button variant="outline" size="sm" onClick={handleExport}>
-            <Download className="h-4 w-4 mr-2" />
-            Export
-          </Button>
         </div>
       </div>
 
@@ -308,4 +375,4 @@ export default function TakingsAnalytics({ onExport, compact = false }: TakingsA
       </div>
     </div>
   );
-}
+};
