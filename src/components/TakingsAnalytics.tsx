@@ -5,7 +5,7 @@ import { DateRangePicker } from '@/components/DateRangePicker';
 import { ExpenseChart } from '@/components/ExpenseChart';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
-import { Download, TrendingUp, CreditCard, Wallet, DollarSign, Building } from 'lucide-react';
+import { Download, TrendingUp, CreditCard, Wallet, DollarSign, Building, Receipt, Users, TrendingDown } from 'lucide-react';
 import { TakingsSummary } from '@/types/takings';
 import { format, subDays, startOfMonth, endOfMonth } from 'date-fns';
 
@@ -66,9 +66,39 @@ export default function TakingsAnalytics({ onExport, compact = false }: TakingsA
   const [paymentSplit, setPaymentSplit] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Weekly costs for the compact profit preview (dashboard)
+  const [weeklyCosts, setWeeklyCosts] = useState<{ bills: number; wages: number } | null>(null);
+
   useEffect(() => {
     fetchAnalytics();
   }, [dateRange]);
+
+  // Fetch weekly costs to show profit in compact mode
+  useEffect(() => {
+    if (compact) {
+      fetchWeeklyCosts();
+    }
+  }, [compact]);
+
+  const fetchWeeklyCosts = async () => {
+    try {
+      const weekStartStr = format(getMondayOfWeek(new Date()), 'yyyy-MM-dd');
+      const { data } = await supabase
+        .from('weekly_costs')
+        .select('bills_amount, wages_amount')
+        .eq('week_start', weekStartStr)
+        .maybeSingle();
+
+      if (data) {
+        setWeeklyCosts({
+          bills: data.bills_amount ?? 0,
+          wages: data.wages_amount ?? 0,
+        });
+      }
+    } catch {
+      // Silently fail for compact mode — table may not exist yet
+    }
+  };
 
   const fetchAnalytics = async () => {
     try {
@@ -186,10 +216,17 @@ export default function TakingsAnalytics({ onExport, compact = false }: TakingsA
     },
   ];
 
-  // If compact mode, show only summary cards
+  // If compact mode, show summary cards + mini profit preview
   if (compact) {
+    const bills = weeklyCosts?.bills ?? 0;
+    const wages = weeklyCosts?.wages ?? 0;
+    const totalCosts = bills + wages;
+    const profit = summary.totalGross - totalCosts;
+    const hasCosts = bills > 0 || wages > 0;
+
     return (
-      <div className="space-y-4">
+      <div className="space-y-3">
+        {/* Existing 4 summary cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Card className="bg-green-50 border-green-200">
             <CardContent className="p-3">
@@ -219,6 +256,64 @@ export default function TakingsAnalytics({ onExport, compact = false }: TakingsA
             </CardContent>
           </Card>
         </div>
+
+        {/* NEW: Mini profit row for dashboard */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-1 border-t border-gray-100">
+          <Card className="bg-orange-50 border-orange-200">
+            <CardContent className="p-3 flex items-center gap-2">
+              <Receipt className="h-4 w-4 text-orange-500 shrink-0" />
+              <div>
+                <p className="text-xs font-medium text-orange-800">Bills</p>
+                <p className="text-base font-bold text-orange-600">
+                  {hasCosts ? `$${bills.toFixed(2)}` : '—'}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="bg-blue-50 border-blue-200">
+            <CardContent className="p-3 flex items-center gap-2">
+              <Users className="h-4 w-4 text-blue-500 shrink-0" />
+              <div>
+                <p className="text-xs font-medium text-blue-800">Wages</p>
+                <p className="text-base font-bold text-blue-600">
+                  {hasCosts ? `$${wages.toFixed(2)}` : '—'}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="bg-red-50 border-red-200">
+            <CardContent className="p-3 flex items-center gap-2">
+              <TrendingDown className="h-4 w-4 text-red-500 shrink-0" />
+              <div>
+                <p className="text-xs font-medium text-red-800">Total Costs</p>
+                <p className="text-base font-bold text-red-600">
+                  {hasCosts ? `$${totalCosts.toFixed(2)}` : '—'}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className={`border ${profit >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-red-100 border-red-300'}`}>
+            <CardContent className="p-3 flex items-center gap-2">
+              <DollarSign className={`h-4 w-4 shrink-0 ${profit >= 0 ? 'text-emerald-600' : 'text-red-600'}`} />
+              <div>
+                <p className={`text-xs font-medium ${profit >= 0 ? 'text-emerald-800' : 'text-red-800'}`}>
+                  Net Profit
+                </p>
+                <p className={`text-base font-bold ${profit >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                  {hasCosts
+                    ? `${profit < 0 ? '-' : ''}$${Math.abs(profit).toFixed(2)}`
+                    : '—'}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {!hasCosts && (
+          <p className="text-xs text-gray-400 text-center">
+            Add bills &amp; wages on the Takings page to see your weekly profit here
+          </p>
+        )}
       </div>
     );
   }
