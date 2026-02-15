@@ -17,7 +17,6 @@ interface DateRangePickerProps {
   onClear: () => void;
   className?: string;
 }
-
 export const DateRangePicker = ({
   dateRange,
   onDateRangeChange,
