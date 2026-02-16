@@ -20,6 +20,7 @@ import {
 interface TakingsAnalyticsProps {
   onExport?: (data: any) => void;
   compact?: boolean;
+  onDateRangeChange?: (range: { from: Date; to: Date }) => void;
 }
 
 // Helper to get Monday of current week (Adelaide time aware)
@@ -68,12 +69,17 @@ const BILL_CATEGORIES = [
   { key: 'bill_other', label: 'Other', icon: '📝' },
 ] as const;
 
-export default function TakingsAnalytics({ onExport, compact = false }: TakingsAnalyticsProps) {
+export default function TakingsAnalytics({ onExport, compact = false, onDateRangeChange }: TakingsAnalyticsProps) {
   const { toast } = useToast();
   const [dateRange, setDateRange] = useState({
     from: getMondayOfWeek(new Date()),
     to: getSundayOfWeek(new Date())
   });
+
+  const handleDateRangeChange = (newRange: { from: Date; to: Date }) => {
+    setDateRange(newRange);
+    onDateRangeChange?.(newRange);
+  };
   const [summary, setSummary] = useState<TakingsSummary>({
     totalGross: 0,
     totalPOS: 0,
@@ -446,7 +452,7 @@ export default function TakingsAnalytics({ onExport, compact = false }: TakingsA
                 key={range.label}
                 variant="outline"
                 size="sm"
-                onClick={() => setDateRange(range.getRange())}
+                onClick={() => handleDateRangeChange(range.getRange())}
                 className="text-xs"
               >
                 {range.label}
@@ -456,8 +462,8 @@ export default function TakingsAnalytics({ onExport, compact = false }: TakingsA
           
           <DateRangePicker
             dateRange={dateRange}
-            onDateRangeChange={setDateRange}
-            onClear={() => setDateRange({
+            onDateRangeChange={handleDateRangeChange}
+            onClear={() => handleDateRangeChange({
               from: getMondayOfWeek(new Date()),
               to: getSundayOfWeek(new Date())
             })}

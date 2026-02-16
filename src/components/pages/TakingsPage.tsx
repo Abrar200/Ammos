@@ -40,8 +40,15 @@ export default function TakingsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTaking, setEditingTaking] = useState<Taking | null>(null);
 
-  // Weekly gross for profit section — derived from this week's takings
+  // Track the date range from TakingsAnalytics
+  const [analyticsDateRange, setAnalyticsDateRange] = useState({
+    from: getMondayOfWeek(new Date()),
+    to: getSundayOfWeek(new Date())
+  });
+
+  // Weekly gross calculated dynamically based on analytics date range
   const [weeklyGross, setWeeklyGross] = useState(0);
+  
   const weekStart = getMondayOfWeek(new Date());
   const weekEnd = getSundayOfWeek(new Date());
 
@@ -62,13 +69,8 @@ export default function TakingsPage() {
       const allTakings = data || [];
       setTakings(allTakings);
 
-      // Compute this week's gross for the profit section
-      const weekStartStr = format(weekStart, 'yyyy-MM-dd');
-      const weekEndStr = format(weekEnd, 'yyyy-MM-dd');
-      const thisWeekGross = allTakings
-        .filter((t) => t.entry_date >= weekStartStr && t.entry_date <= weekEndStr)
-        .reduce((sum, t) => sum + (t.gross_takings || 0), 0);
-      setWeeklyGross(thisWeekGross);
+      // Calculate weekly gross based on the current analytics date range
+      calculateWeeklyGross(allTakings, analyticsDateRange);
     } catch (error) {
       console.error('Error fetching takings:', error);
       toast({
@@ -79,6 +81,23 @@ export default function TakingsPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const calculateWeeklyGross = (allTakings: Taking[], dateRange: { from: Date; to: Date }) => {
+    const fromStr = format(dateRange.from, 'yyyy-MM-dd');
+    const toStr = format(dateRange.to, 'yyyy-MM-dd');
+    
+    const gross = allTakings
+      .filter((t) => t.entry_date >= fromStr && t.entry_date <= toStr)
+      .reduce((sum, t) => sum + (t.gross_takings || 0), 0);
+    
+    setWeeklyGross(gross);
+  };
+
+  // Handle date range changes from TakingsAnalytics
+  const handleDateRangeChange = (newRange: { from: Date; to: Date }) => {
+    setAnalyticsDateRange(newRange);
+    calculateWeeklyGross(takings, newRange);
   };
 
   const handleEdit = (taking: Taking) => {
@@ -151,13 +170,17 @@ export default function TakingsPage() {
       </div>
 
       {/* ── Analytics Section (date-range picker, charts, summary cards) ── */}
-      <TakingsAnalytics onExport={handleExport} />
+      <TakingsAnalytics 
+        onExport={handleExport} 
+        onDateRangeChange={handleDateRangeChange}
+      />
 
       {/* ── Weekly Profit Breakdown ── */}
       <WeeklyProfitSection
         weeklyGross={weeklyGross}
         weekStart={weekStart}
         weekEnd={weekEnd}
+        displayDateRange={analyticsDateRange}
         onUpdate={fetchTakings}
       />
 

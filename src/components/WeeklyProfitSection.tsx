@@ -69,6 +69,8 @@ interface WeeklyProfitSectionProps {
   weekStart: Date;
   weekEnd: Date;
   onUpdate?: () => void;
+  /** Pass the date range from TakingsAnalytics so we fetch costs for the correct week */
+  displayDateRange?: { from: Date; to: Date };
 }
 
 // ─── Bill Categories Definition ──────────────────────────────────────────────
@@ -535,6 +537,7 @@ export default function WeeklyProfitSection({
   weekStart,
   weekEnd,
   onUpdate,
+  displayDateRange,
 }: WeeklyProfitSectionProps) {
   const { toast } = useToast();
   const [costRecord, setCostRecord] = useState<WeeklyCost | null>(null);
@@ -544,8 +547,11 @@ export default function WeeklyProfitSection({
   const [gstDialogOpen, setGSTDialogOpen] = useState(false);
   const [psilaDialogOpen, setPsilaDialogOpen] = useState(false);
 
-  const weekStartStr = format(weekStart, 'yyyy-MM-dd');
-  const weekEndStr = format(weekEnd, 'yyyy-MM-dd');
+  // Use displayDateRange if provided (from TakingsAnalytics), otherwise use current week
+  const effectiveWeekStart = displayDateRange?.from ?? weekStart;
+  const effectiveWeekEnd = displayDateRange?.to ?? weekEnd;
+  const weekStartStr = format(effectiveWeekStart, 'yyyy-MM-dd');
+  const weekEndStr = format(effectiveWeekEnd, 'yyyy-MM-dd');
 
   const fetchCosts = useCallback(async () => {
     try {
@@ -777,7 +783,7 @@ export default function WeeklyProfitSection({
   const profitMargin = weeklyGross > 0 ? (profit / weeklyGross) * 100 : 0;
   const isProfitable = profit >= 0;
 
-  const weekLabel = `${format(weekStart, 'dd MMM')} – ${format(weekEnd, 'dd MMM yyyy')}`;
+  const weekLabel = `${format(effectiveWeekStart, 'dd MMM')} – ${format(effectiveWeekEnd, 'dd MMM yyyy')}`;
 
   // Extract bill values for dialog
   const billValues: Record<BillCategoryKey, number> = {} as any;
